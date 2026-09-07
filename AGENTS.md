@@ -24,7 +24,7 @@
 
 ```
 wegroup-members/
-├── agents.md              # 本文件
+├── AGENTS.md              # 本文件
 ├── scripts/               # 数据采集层（本地运行，Node 或 Python）
 │   └── collect.*          # 参数化：--group <群名> --year <年> --out <路径>
 ├── web/                   # Web 展示层（静态站，Vite）
