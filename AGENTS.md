@@ -41,33 +41,41 @@ wegroup-members/
 2. 读 `contact.db`（只读）批量补齐：alias、nickName、remark、`small_head_url`，并经 `chatroom_member` 校验成员身份
 3. 按月分片拉取今年（当年 1 月 1 日 ~ 采集日）全部群消息，`seq` 去重，按 sender wxid 聚合发言次数
    - **统计口径**：排除系统消息（type=10000）与无 sender / sender=`系统消息` 的记录；其余类型（文本 1、图片 3、视频 43、**表情包 47 算发言**、链接/引用/文件 49 等）全部计为发言。口径写入 `config.countingRule` 并在站点明示
-   - **退群成员**：只输出采集时点的当前成员；已退群者的发言不计入榜单（脚本日忘打印被排除的人数/条数以便核对）
+   - **退群成员**：只输出采集时点的当前成员；已退群者的发言不计入榜单（脚本日志打印被排除的人数/条数以便核对）
+   - **非法 sender**：Chatlog 对部分引用消息会把消息 XML 塞进 `sender` 字段，用 `^[A-Za-z0-9_\-@.]+$` 校验 wxid 格式，不合法的归入排除（实测约 200 条/年）
 4. 头像下载到本地 `avatars/<wxid>.png`（HTTPS + `wx.qlogo.cn` 校验 + 大小限制，失败/缺失降级首字母）
 5. 产出统一 schema 的 `members.json`：
 
 ```jsonc
 {
   "config": {
-    "groupName": "...",
-    "year": 2026,
-    "collectedAt": "...",     // 采集时刻
-    "dataCutoff": "...",      // Chatlog 快照中该群最新一条消息的时间
-    "memberCount": 448,
-    "countingRule": "..."     // 统计口径自述，站点页脚展示
+    "groupName": "...",       // string，群完整名称，来自 group.local.json；站点标题 / 顶部概览展示
+    "year": 2026,             // number，统计年份，来自 --year；统计区间 = 该年 01-01 ~ 采集日（或 12-31）
+    "collectedAt": "...",     // ISO 8601 含时区（如 2026-09-07T23:02:20+08:00），脚本运行时刻；“成员名单快照时间”
+    "dataCutoff": "...",      // ISO 8601 含时区，Chatlog 快照中该群当年最新一条消息的时间；“发言数据截止时间”，站点必须明示
+    "memberCount": 447,       // number，采集时点当前成员数，恒等于 members.length
+    "countingRule": "..."     // string，统计口径自述（人读文案），站点页脚原文展示
   },
-  "members": [
+  "members": [                // 已按 msgCount 降序，同分按 wxid 升序；只含采集时点的当前成员
     {
-      "wxid": "...",
-      "alias": "...",         // 微信号；实测多数成员为空，展示层按缺省处理
-      "nickName": "...",
-      "displayName": "...",   // 群昵称；可能为空 → 展示回退链 displayName → nickName → 首字母
-      "remark": "...",        // 我方备注；群主（本人）已决定可公开
-      "avatar": "avatars/<wxid>.png",
-      "msgCount": 123         // 不在字段名嵌年份，年份看 config.year
+      "wxid": "...",          // string，微信内部唯一 id（主键）。两种形态：系统分配的 wxid_xxx，或用户早年自设的原始微信号（此时它本身就是可搜索的微信号）
+      "alias": "...",         // string，用户后来设置的微信号，来自 contact.db；未设置或微信未下发（非好友大多如此）为 ""。实测仅 ~8% 有值
+      "nickName": "...",      // string，微信昵称（用户全局设置），来自 contact.db；实测 100% 有值，是展示名的最终保底
+      "displayName": "...",   // string，群内昵称（用户针对本群设置），来自 chatroom API；未设置为 ""（实测约一半为空）
+      "remark": "...",        // string，我方（采集者）给该人打的备注，来自 contact.db；未备注为 ""。已拍板可公开
+      "avatar": "...",        // string | null，相对站点根的本地头像路径 avatars/<wxid>.png；contact.db 无有效 wx.qlogo.cn URL 时为 null → 展示层渲染首字母占位
+      "msgCount": 123         // number ≥ 0，该成员在 config.year 内的发言条数（口径见 countingRule）；不在字段名嵌年份
     }
   ]
 }
 ```
+
+展示层回退约定：
+
+- **展示名**：`displayName` → `nickName`（不使用 `remark`，它是采集者视角不是本人视角；可作副标题或搜索字段）
+- **头像**：`avatar` → 展示名首字符占位
+- **微信号**：`alias` → 为空时不展示该行（不用 wxid 顶替，避免把系统分配的 wxid_xxx 当微信号误导读者）
+- 空值统一用 `""`（字符串字段）或 `null`（仅 `avatar`），不省略字段、不用 `undefined`
 
 ### Web 层（web/）
 
@@ -104,14 +112,14 @@ wegroup-members/
 
 域名候选与群名强相关，属群特定信息，不写入本文件。候选清单、RDAP 实测结果与选型理由见本地笔记（Obsidian `note_dev/01-项目/wegroup-members.md`）。
 
-
 通用原则：优先短、可扩子域（`members.<domain>` / `daily.<domain>`）；三字母 SLD 在部分注册局属溢价域名，下单前到 Cloudflare Registrar / Porkbun 核实实际价格。
 
 ### 4. 统计与成员口径（2026-09-06）
 
 - 表情包（type=47）**算**发言；系统消息（type=10000）与无 sender 记录**不算**
 - 退群成员：**不统计**（2026-09-07 拍板）。成员墙只含采集时点的当前成员，已退群者的发言不计入榜单。实测首次采集时只影响 22 人，简化优于保留开关
-- 不追踪入群时间（YAGNI）：成员墙只记录采集时点的当前成员 + 今年发言者
+- 不追踪入群时间（YAGNI）：成员墙只记录采集时点的当前成员
+- `displayName` 只取 chatroom API 的纯群昵称，**不用消息里的 `senderName` 兜底**：实测 Chatlog 的 senderName 会优先展示我方 remark，会把备注混进群昵称字段。回退交给展示层
 
 ## 数据纪律（继承自 chatlog-story-daily skill）
 
