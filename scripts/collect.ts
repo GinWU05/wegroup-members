@@ -8,7 +8,7 @@
  *
  * 用法：
  *   pnpm collect         [-- --config group.local.json --year 2026 --out web/public/data]
- *   pnpm collect:private   —— 隐私模式（--private）：members.json 不输出 remark 字段
+ *   pnpm collect:private   —— 隐私模式（--private）：删除 PRIVATE_STRIPPED_FIELDS 列出的字段，产物可直接分享给群成员
  *
  * 产出：
  *   <out>/members.json            —— 站点数据（含全部字段，公开口径见 AGENTS.md）
@@ -63,15 +63,34 @@ interface ContactRow {
   small_head_url: string | null;
 }
 
-/** members.json 单条成员，schema 见 AGENTS.md；隐私模式（--private）下无 remark 字段 */
+/** members.json 单条成员（完整 schema，见 AGENTS.md） */
 interface Member {
   wxid: string;
   alias: string;
   nickName: string;
   displayName: string;
-  remark?: string;
+  remark: string;
   avatar: string | null;
   msgCount: number;
+}
+
+// ---------- 隐私模式字段清单（唯一事实来源）----------
+
+/**
+ * --private 时从每条成员记录中删除的字段。
+ * 目的：保护群成员隐私，使 members.json 可直接分享给群成员。
+ * 新增需脱敏的字段只改这一处：类型、剥离逻辑、日忘、config.omittedFields 全部由此派生。
+ */
+const PRIVATE_STRIPPED_FIELDS = ["remark"] as const satisfies readonly (keyof Member)[];
+
+type PrivateStrippedField = (typeof PRIVATE_STRIPPED_FIELDS)[number];
+/** 隐私模式下的成员记录 */
+type PrivateMember = Omit<Member, PrivateStrippedField>;
+
+function stripPrivateFields(m: Member): PrivateMember {
+  const out: Record<string, unknown> = { ...m };
+  for (const f of PRIVATE_STRIPPED_FIELDS) delete out[f];
+  return out as PrivateMember;
 }
 
 interface MembersOutput {
@@ -82,8 +101,10 @@ interface MembersOutput {
     dataCutoff: string;
     memberCount: number;
     countingRule: string;
+    /** 隐私模式下被删除的字段；全量模式为 []。让产物自描述，展示层据此处理可选字段 */
+    omittedFields: readonly PrivateStrippedField[];
   };
-  members: Member[];
+  members: Member[] | PrivateMember[];
 }
 
 // ---------- CLI ----------
@@ -92,7 +113,7 @@ interface CliArgs {
   config: string;
   year: number;
   out: string;
-  /** 隐私模式：不输出 remark（采集者备注） */
+  /** 隐私模式：删除 PRIVATE_STRIPPED_FIELDS 列出的字段 */
   private: boolean;
 }
 
@@ -126,7 +147,7 @@ function parseArgs(argv: string[]): CliArgs {
 
 const args = parseArgs(process.argv);
 const log = (...xs: unknown[]): void => console.error("[collect]", ...xs);
-if (args.private) log("隐私模式：members.json 不输出 remark");
+if (args.private) log(`隐私模式：members.json 删除字段 ${PRIVATE_STRIPPED_FIELDS.join(", ")}`);
 
 // ---------- 配置 ----------
 
@@ -271,8 +292,7 @@ for (const [wxid, displayName] of currentMembers) {
     nickName: c?.nick_name ?? "",
     // 纯群昵称（chatroom API），未设置为 ""；不用消息 senderName 兜底（它会混入我方 remark），回退交给展示层
     displayName,
-    // 隐私模式不输出 remark（整个字段省略，而非置空）
-    ...(args.private ? {} : { remark: c?.remark ?? "" }),
+    remark: c?.remark ?? "",
     avatar: avatarOk ? `avatars/${wxid}.png` : null,
     msgCount: speakers.get(wxid) ?? 0,
   });
@@ -292,8 +312,9 @@ const output: MembersOutput = {
     memberCount: currentMembers.size,
     countingRule:
       "统计当年群内全部消息，排除系统消息（撤回/入退群提示等）；文本、图片、视频、表情包、链接与引用均计为发言。仅统计采集时的当前群成员，已退群者不计入。",
+    omittedFields: args.private ? PRIVATE_STRIPPED_FIELDS : [],
   },
-  members,
+  members: args.private ? members.map(stripPrivateFields) : members,
 };
 
 const outDir = resolve(args.out);
