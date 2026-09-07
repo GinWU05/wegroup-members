@@ -45,7 +45,7 @@ wegroup-members/
 - **包管理**：pnpm，`packageManager` 字段锁版本
 - **代码质量**：Biome 一个工具包 lint + format（不同时上 ESLint + Prettier）；`tsc --noEmit` 做类型检查
 - **提交前自查**：`pnpm lint:fix && pnpm typecheck`；仓库不内置 git hook，隐私防线靠 `.gitignore` 与本机本地措施
-- **常用命令**：`pnpm collect`（采集，可追加 `-- --year 2025`）/ `pnpm collect:private`（隐私模式，不输出 `remark`）/ `pnpm lint:fix` / `pnpm typecheck`
+- **常用命令**：`pnpm collect`（采集，可追加 `-- --year 2025`）/ `pnpm collect:private`（隐私模式，产物可直接分享给群成员）/ `pnpm lint:fix` / `pnpm typecheck`
 
 ### 采集层（scripts/）
 
@@ -66,7 +66,8 @@ wegroup-members/
     "collectedAt": "...",     // 采集时间
     "dataCutoff": "...",      // 数据截止时间
     "memberCount": 447,       // 成员数
-    "countingRule": "..."     // 统计口径
+    "countingRule": "...",    // 统计口径
+    "omittedFields": []       // 隐私模式下被删除的字段名；全量模式为 []
   },
   "members": [                // 按 msgCount 降序
     {
@@ -74,7 +75,7 @@ wegroup-members/
       "alias": "...",         // 微信号
       "nickName": "...",      // 微信昵称
       "displayName": "...",   // 群昵称
-      "remark": "...",        // 采集者备注；隐私模式（--private）下整个字段省略
+      "remark": "...",        // 采集者备注；隐私模式下删除
       "avatar": "...",        // 头像路径，可 null
       "msgCount": 123         // 发言数
     }
@@ -87,7 +88,7 @@ wegroup-members/
 - **展示名**：`displayName` → `nickName`（不使用 `remark`，它是采集者视角不是本人视角；可作副标题或搜索字段）
 - **头像**：`avatar` → 展示名首字符占位
 - **微信号**：`alias` → 为空时不展示该行（不用 wxid 顶替，避免把系统分配的 wxid_xxx 当微信号误导读者）
-- 空值统一用 `""`（字符串字段）或 `null`（仅 `avatar`），不省略字段、不用 `undefined`。唯一例外：隐私模式下 `remark` 整个字段不存在，展示层需按可选字段处理
+- 空值统一用 `""`（字符串字段）或 `null`（仅 `avatar`），不省略字段、不用 `undefined`。唯一例外：隐私模式下 `config.omittedFields` 列出的字段整个不存在，展示层按可选字段处理（不要硬编码字段名，读 `omittedFields`）
 
 ### Web 层（web/）
 
@@ -110,7 +111,9 @@ wegroup-members/
 - 仓库只含采集脚本 + Web 模板；`data/`、`avatars/`、`*.local.json`（群特定配置）全部 gitignore
 - **公开字段决策（2026-09-06，本人拍板）**：`alias`、`wxid`、`remark` 均允许进入公开产物；头像文件名直接用 wxid（无需 hash）
 - 注意：CF Pages 部署即数据可见（受访问控制约束，见部署节）。上线前仍需征得群成员/群主同意
-- 脱敏开关：`pnpm collect:private`（`--private`）产出不含 `remark` 的 `members.json`，用于分享；默认 `pnpm collect` 仍全量输出。目前仅此一字段差异，日后需收紧更多字段在同一 flag 下扩展
+- **隐私模式**：`pnpm collect:private`（`--private`）。目的是保护群成员隐私，使 `members.json` 可直接分享给群成员；默认 `pnpm collect` 仍全量输出
+  - **删除字段清单只有一个事实来源**：`scripts/collect.ts` 的 `PRIVATE_STRIPPED_FIELDS`（当前：`remark`）。它经 `satisfies (keyof Member)[]` 约束，写错字段名或字段已从 schema 删除时 `typecheck` 直接报错；剥离逻辑、日忘、`config.omittedFields` 全部由它派生。日后要收紧更多字段（如 `alias`）只改这一行
+  - 产物自描述：`config.omittedFields` 写明删了哪些字段，全量模式为 `[]`，展示层不硬编码
 
 ### 2. 通用性 / monorepo
 
@@ -147,6 +150,6 @@ wegroup-members/
 - [ ] M1 采集脚本：群成员（chatroom API）+ 联系人信息（contact.db 只读）+ 年度发言计数（按月分片）→ `members.json`
 - [ ] M2 头像本地化：下载 / 校验 / 缓存 / 降级
 - [ ] M3 Web 站点：卡片墙 + 排序 + 搜索
-- [x] M4 脱敏开关：`collect:private` 不输出 `remark`（默认仍全量）
+- [x] M4 隐私模式：`collect:private`，删除字段清单集中在 `PRIVATE_STRIPPED_FIELDS`（默认仍全量）
 - [ ] M5 CF Pages 部署（**必须 CF Access 或口令**）
 - [ ] M6（可选）域名购买与绑定
