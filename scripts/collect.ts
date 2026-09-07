@@ -12,7 +12,8 @@
  *
  * 产出：
  *   <out>/members.json            —— 站点数据（含全部字段，公开口径见 AGENTS.md）
- *   data/avatar-manifest.json     —— wxid → 头像 URL 清单，供 M2 下载用（不部署）
+ *   <avatars-dir>/<wxid>.<ext>    —— 本地化头像（M2，见 lib/avatars.ts）
+ *   data/avatar-cache.json        —— 头像下载缓存记录（不部署）
  *
  * 统计口径（详见 AGENTS.md「统计与成员口径」）：
  *   - 排除系统消息（type=10000）与无 sender / sender=系统消息 / sender 非法（Chatlog
@@ -26,6 +27,7 @@ import { homedir } from "node:os";
 import { dirname, resolve } from "node:path";
 import process from "node:process";
 import { DatabaseSync } from "node:sqlite";
+import { syncAvatars } from "./lib/avatars.ts";
 
 // ---------- 类型 ----------
 
@@ -111,6 +113,10 @@ interface CliArgs {
   config: string;
   year: number;
   out: string;
+  /** 头像落盘目录（站点 public/avatars） */
+  avatarsDir: string;
+  /** 跳过头像下载（调试统计时省时；members.json 中 avatar 全为 null） */
+  noAvatars: boolean;
   /** 隐私模式：删除 PRIVATE_STRIPPED_FIELDS 列出的字段 */
   private: boolean;
 }
@@ -125,6 +131,8 @@ function parseArgs(argv: string[]): CliArgs {
     config: "group.local.json",
     year: new Date().getFullYear(),
     out: "web/public/data",
+    avatarsDir: "web/public/avatars",
+    noAvatars: false,
     private: false,
   };
   for (let i = 2; i < argv.length; i++) {
@@ -134,6 +142,8 @@ function parseArgs(argv: string[]): CliArgs {
     if (key === "--config" && val) args.config = argv[++i] as string;
     else if (key === "--year" && val) args.year = Number(argv[++i]);
     else if (key === "--out" && val) args.out = argv[++i] as string;
+    else if (key === "--avatars-dir" && val) args.avatarsDir = argv[++i] as string;
+    else if (key === "--no-avatars") args.noAvatars = true;
     else if (key === "--private") args.private = true;
     else fail(`未知或缺值参数: ${key}`);
   }
@@ -270,20 +280,55 @@ for (const [wxid, count] of speakers) {
 log(`已退群发言者 ${leftSpeakers} 人、${leftMsgs} 条，按口径不计入`);
 
 const AVATAR_URL_RE = /^https:\/\/wx\.qlogo\.cn\//;
-const members: Member[] = [];
-const avatarManifest: Record<string, string> = {};
+const contacts = new Map<string, ContactRow>();
+/** wxid -> 头像 URL；已经白名名单 + chatroom_member 双重校验 */
+const avatarUrls = new Map<string, string>();
 let noContact = 0;
-let noAvatar = 0;
+let noAvatarUrl = 0;
+let notInDbRoom = 0;
 
-for (const [wxid, displayName] of currentMembers) {
+for (const wxid of currentMembers.keys()) {
   // 精确匹配 username，无模糊命中风险
   const c = contactStmt.get(wxid) as ContactRow | undefined;
-  if (!c) noContact++;
-  const avatarUrl = c?.small_head_url ?? "";
-  const avatarOk = AVATAR_URL_RE.test(avatarUrl);
-  if (avatarOk) avatarManifest[wxid] = avatarUrl;
-  else noAvatar++;
+  if (!c) {
+    noContact++;
+    continue;
+  }
+  contacts.set(wxid, c);
+  const url = c.small_head_url ?? "";
+  if (!AVATAR_URL_RE.test(url)) noAvatarUrl++;
+  else if (!dbMemberIds.has(wxid))
+    notInDbRoom++; // 头像纪律：未经 chatroom_member 确认的不下载
+  else avatarUrls.set(wxid, url);
+}
+db.close();
+log(
+  `contact.db 无记录 ${noContact} 人；无有效头像 URL ${noAvatarUrl} 人；未经 chatroom_member 确认 ${notInDbRoom} 人`,
+);
 
+// ---------- 4. 头像本地化（M2）----------
+
+/** wxid -> 落盘文件名（仅成功者） */
+let avatarFiles = new Map<string, string>();
+if (args.noAvatars) {
+  log("--no-avatars：跳过头像下载，avatar 全为 null");
+} else {
+  const cacheFile = resolve("data/avatar-cache.json");
+  mkdirSync(dirname(cacheFile), { recursive: true });
+  log(`同步头像 ${avatarUrls.size} 个 → ${resolve(args.avatarsDir)}`);
+  const r = await syncAvatars(avatarUrls, { dir: resolve(args.avatarsDir), cacheFile, log });
+  avatarFiles = r.files;
+  const s = r.stats;
+  log(`头像：缓存 ${s.cached}，新下载 ${s.downloaded}，失败 ${s.failed}，清理旧文件 ${s.pruned}`);
+  for (const f of r.failures) log(`  ✗ ${f.wxid}: ${f.reason}`);
+}
+
+// ---------- 5. 组装成员 ----------
+
+const members: Member[] = [];
+for (const [wxid, displayName] of currentMembers) {
+  const c = contacts.get(wxid);
+  const file = avatarFiles.get(wxid);
   members.push({
     wxid,
     alias: c?.alias ?? "",
@@ -291,15 +336,15 @@ for (const [wxid, displayName] of currentMembers) {
     // 纯群昵称（chatroom API），未设置为 ""；不用消息 senderName 兜底（它会混入我方 remark），回退交给展示层
     displayName,
     remark: c?.remark ?? "",
-    avatar: avatarOk ? `avatars/${wxid}.png` : null,
+    // 站点根相对路径；仅指向真实落盘的文件，否则 null 交由展示层降级首字母
+    avatar: file ? `avatars/${file}` : null,
     msgCount: speakers.get(wxid) ?? 0,
   });
 }
-db.close();
 
 members.sort((a, b) => b.msgCount - a.msgCount || a.wxid.localeCompare(b.wxid));
 
-// ---------- 4. 输出 ----------
+// ---------- 6. 输出 ----------
 
 const output: MembersOutput = {
   config: {
@@ -320,13 +365,10 @@ mkdirSync(outDir, { recursive: true });
 const outFile = resolve(outDir, "members.json");
 writeFileSync(outFile, `${JSON.stringify(output, null, 2)}\n`);
 
-const manifestFile = resolve("data/avatar-manifest.json");
-mkdirSync(dirname(manifestFile), { recursive: true });
-writeFileSync(manifestFile, `${JSON.stringify(avatarManifest, null, 2)}\n`);
-
 log(`✅ ${outFile}`);
 log(
   `   成员条目 ${members.length}，其中今年有发言 ${members.filter((x) => x.msgCount > 0).length} 人`,
 );
-log(`   contact.db 无记录 ${noContact} 人；无有效头像 ${noAvatar} 人（降级首字母）`);
-log(`✅ ${manifestFile}（${Object.keys(avatarManifest).length} 个头像 URL，供 M2 下载）`);
+log(
+  `   有头像 ${members.filter((x) => x.avatar).length} 人，无头像 ${members.filter((x) => !x.avatar).length} 人（展示层降级首字母）`,
+);
