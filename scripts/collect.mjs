@@ -84,12 +84,20 @@ log(`当前成员: ${currentMembers.size} 人（群主: ${room.owner}）`);
 
 // ---------- 2. 年度消息按月分片拉取 + 计数 ----------
 
+/** ISO 8601 含本地时区偏移（与 Chatlog 返回的 dataCutoff 格式一致，如 2026-09-07T23:02:20+08:00） */
+function isoLocal(d) {
+  const offMin = -d.getTimezoneOffset();
+  const pad = (n) => String(Math.abs(n)).padStart(2, "0");
+  const local = new Date(d.getTime() + offMin * 60000).toISOString().slice(0, 19);
+  return `${local}${offMin >= 0 ? "+" : "-"}${pad(Math.trunc(offMin / 60))}:${pad(offMin % 60)}`;
+}
+
 const now = new Date();
-const collectedAt = now.toISOString();
+const collectedAt = isoLocal(now);
 const lastMonth = args.year === now.getFullYear() ? now.getMonth() + 1 : 12;
 
 const seenSeq = new Set(); // seq 去重
-/** @type {Map<string, { count: number, lastName: string, lastTime: string }>} */
+/** @type {Map<string, number>} sender wxid -> 发言条数 */
 const speakers = new Map();
 let dataCutoff = "";
 let totalCounted = 0;
@@ -116,13 +124,7 @@ for (let m = 1; m <= lastMonth; m++) {
       totalExcluded++;
       continue;
     }
-    const rec = speakers.get(msg.sender) ?? { count: 0, lastName: "", lastTime: "" };
-    rec.count++;
-    if (msg.time >= rec.lastTime) {
-      rec.lastTime = msg.time;
-      if (msg.senderName) rec.lastName = msg.senderName;
-    }
-    speakers.set(msg.sender, rec);
+    speakers.set(msg.sender, (speakers.get(msg.sender) ?? 0) + 1);
     counted++;
   }
   totalCounted += counted;
@@ -161,10 +163,10 @@ const contactStmt = db.prepare(
 // 口径：只输出当前成员；已退群者的发言不计入榜单
 let leftSpeakers = 0;
 let leftMsgs = 0;
-for (const [wxid, rec] of speakers) {
+for (const [wxid, count] of speakers) {
   if (!currentMembers.has(wxid)) {
     leftSpeakers++;
-    leftMsgs += rec.count;
+    leftMsgs += count;
   }
 }
 log(`已退群发言者 ${leftSpeakers} 人、${leftMsgs} 条，按口径不计入`);
@@ -187,11 +189,11 @@ for (const wxid of currentMembers.keys()) {
     wxid,
     alias: c?.alias ?? "",
     nickName: c?.nick_name ?? "",
-    // 群昵称；为空时用消息中最后可见的 senderName 兜底，展示层再回退 nickName
-    displayName: currentMembers.get(wxid) || speakers.get(wxid)?.lastName || "",
+    // 纯群昵称（chatroom API），未设置为 ""；不用消息 senderName 兜底（它会混入我方 remark），回退交给展示层
+    displayName: currentMembers.get(wxid) ?? "",
     remark: c?.remark ?? "",
     avatar: avatarOk ? `avatars/${wxid}.png` : null,
-    msgCount: speakers.get(wxid)?.count ?? 0,
+    msgCount: speakers.get(wxid) ?? 0,
   });
 }
 db.close();
