@@ -1,0 +1,10 @@
+node_modules/
+dist/
+
+# 数据与隐私产物：绝不入库
+data/
+avatars/
+web/public/data/
+web/public/avatars/
+*.local.json
+.env*
