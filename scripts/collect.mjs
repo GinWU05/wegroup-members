@@ -17,7 +17,7 @@
  *   - 排除系统消息（type=10000）与无 sender / sender=系统消息 / sender 非法（Chatlog
  *     对部分引用消息会把 XML 塞进 sender 字段）的记录
  *   - 其余类型（文本/图片/视频/表情包/链接引用等）全部计为发言
- *   - 退群成员保留，inGroup: false
+ *   - 只统计采集时点的当前群成员；已退群者的发言不计入（决策 2026-09-07）
  */
 
 import { DatabaseSync } from "node:sqlite";
@@ -158,8 +158,16 @@ const contactStmt = db.prepare(
   "SELECT username, alias, nick_name, remark, small_head_url FROM contact WHERE username = ?"
 );
 
-/** 所有需要输出的 wxid：当前成员 ∪ 今年发言者 */
-const allWxids = new Set([...currentMembers.keys(), ...speakers.keys()]);
+// 口径：只输出当前成员；已退群者的发言不计入榜单
+let leftSpeakers = 0;
+let leftMsgs = 0;
+for (const [wxid, rec] of speakers) {
+  if (!currentMembers.has(wxid)) {
+    leftSpeakers++;
+    leftMsgs += rec.count;
+  }
+}
+log(`已退群发言者 ${leftSpeakers} 人、${leftMsgs} 条，按口径不计入`);
 
 const AVATAR_URL_RE = /^https:\/\/wx\.qlogo\.cn\//;
 const members = [];
@@ -167,10 +175,9 @@ const avatarManifest = {};
 let noContact = 0;
 let noAvatar = 0;
 
-for (const wxid of allWxids) {
+for (const wxid of currentMembers.keys()) {
   const c = contactStmt.get(wxid); // 精确匹配 username，无模糊命中风险
   if (!c) noContact++;
-  const inGroup = currentMembers.has(wxid);
   const avatarUrl = c?.small_head_url ?? "";
   const avatarOk = AVATAR_URL_RE.test(avatarUrl);
   if (!avatarOk) noAvatar++;
@@ -180,12 +187,11 @@ for (const wxid of allWxids) {
     wxid,
     alias: c?.alias ?? "",
     nickName: c?.nick_name ?? "",
-    // 展示回退链：群昵称 → 消息中最后可见的 senderName（对退群者有用）
+    // 群昵称；为空时用消息中最后可见的 senderName 兜底，展示层再回退 nickName
     displayName: currentMembers.get(wxid) || speakers.get(wxid)?.lastName || "",
     remark: c?.remark ?? "",
     avatar: avatarOk ? `avatars/${wxid}.png` : null,
     msgCount: speakers.get(wxid)?.count ?? 0,
-    inGroup,
   });
 }
 db.close();
@@ -204,7 +210,7 @@ const output = {
     dataCutoff,
     memberCount: currentMembers.size,
     countingRule:
-      "统计当年群内全部消息，排除系统消息（撤回/入退群提示等）；文本、图片、视频、表情包、链接与引用均计为发言。含当年发过言但已退群的成员（标记为已退群）。",
+      "统计当年群内全部消息，排除系统消息（撤回/入退群提示等）；文本、图片、视频、表情包、链接与引用均计为发言。仅统计采集时的当前群成员，已退群者不计入。",
   },
   members,
 };
@@ -219,6 +225,6 @@ mkdirSync(dirname(manifestFile), { recursive: true });
 writeFileSync(manifestFile, JSON.stringify(avatarManifest, null, 2) + "\n");
 
 log(`✅ ${outFile}`);
-log(`   成员条目 ${members.length}（当前成员 ${currentMembers.size}，退群发言者 ${members.filter((x) => !x.inGroup).length}）`);
+log(`   成员条目 ${members.length}，其中今年有发言 ${members.filter((x) => x.msgCount > 0).length} 人`);
 log(`   contact.db 无记录 ${noContact} 人；无有效头像 ${noAvatar} 人（降级首字母）`);
 log(`✅ ${manifestFile}（${Object.keys(avatarManifest).length} 个头像 URL，供 M2 下载）`);
