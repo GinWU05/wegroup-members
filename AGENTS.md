@@ -29,7 +29,7 @@ wegroup-members/
 ├── tsconfig.json          # strict，noEmit，erasableSyntaxOnly（Node 原生跑 .ts，无构建步骤）
 ├── biome.json             # Biome 统一 lint + format
 ├── scripts/               # 数据采集层（本地运行）
-│   └── collect.ts         # 参数化：--config <群配置> --year <年> --out <路径>
+│   └── collect.ts         # 参数化：--config <群配置> --year <年> --out <路径> [--private]
 ├── web/                   # Web 展示层（静态站，Vite）
 │   ├── src/
 │   └── public/
@@ -45,7 +45,7 @@ wegroup-members/
 - **包管理**：pnpm，`packageManager` 字段锁版本
 - **代码质量**：Biome 一个工具包 lint + format（不同时上 ESLint + Prettier）；`tsc --noEmit` 做类型检查
 - **提交前自查**：`pnpm lint:fix && pnpm typecheck`；仓库不内置 git hook，隐私防线靠 `.gitignore` 与本机本地措施
-- **常用命令**：`pnpm collect`（采集，可追加 `-- --year 2025`）/ `pnpm lint:fix` / `pnpm typecheck`
+- **常用命令**：`pnpm collect`（采集，可追加 `-- --year 2025`）/ `pnpm collect:private`（隐私模式，不输出 `remark`）/ `pnpm lint:fix` / `pnpm typecheck`
 
 ### 采集层（scripts/）
 
@@ -74,7 +74,7 @@ wegroup-members/
       "alias": "...",         // 微信号
       "nickName": "...",      // 微信昵称
       "displayName": "...",   // 群昵称
-      "remark": "...",        // 采集者备注
+      "remark": "...",        // 采集者备注；隐私模式（--private）下整个字段省略
       "avatar": "...",        // 头像路径，可 null
       "msgCount": 123         // 发言数
     }
@@ -87,7 +87,7 @@ wegroup-members/
 - **展示名**：`displayName` → `nickName`（不使用 `remark`，它是采集者视角不是本人视角；可作副标题或搜索字段）
 - **头像**：`avatar` → 展示名首字符占位
 - **微信号**：`alias` → 为空时不展示该行（不用 wxid 顶替，避免把系统分配的 wxid_xxx 当微信号误导读者）
-- 空值统一用 `""`（字符串字段）或 `null`（仅 `avatar`），不省略字段、不用 `undefined`
+- 空值统一用 `""`（字符串字段）或 `null`（仅 `avatar`），不省略字段、不用 `undefined`。唯一例外：隐私模式下 `remark` 整个字段不存在，展示层需按可选字段处理
 
 ### Web 层（web/）
 
@@ -110,7 +110,7 @@ wegroup-members/
 - 仓库只含采集脚本 + Web 模板；`data/`、`avatars/`、`*.local.json`（群特定配置）全部 gitignore
 - **公开字段决策（2026-09-06，本人拍板）**：`alias`、`wxid`、`remark` 均允许进入公开产物；头像文件名直接用 wxid（无需 hash）
 - 注意：CF Pages 部署即数据可见（受访问控制约束，见部署节）。上线前仍需征得群成员/群主同意
-- 脱敏开关保留为构建期能力（万一日后想收紧字段），但默认全量输出
+- 脱敏开关：`pnpm collect:private`（`--private`）产出不含 `remark` 的 `members.json`，用于分享；默认 `pnpm collect` 仍全量输出。目前仅此一字段差异，日后需收紧更多字段在同一 flag 下扩展
 
 ### 2. 通用性 / monorepo
 
@@ -147,6 +147,6 @@ wegroup-members/
 - [ ] M1 采集脚本：群成员（chatroom API）+ 联系人信息（contact.db 只读）+ 年度发言计数（按月分片）→ `members.json`
 - [ ] M2 头像本地化：下载 / 校验 / 缓存 / 降级
 - [ ] M3 Web 站点：卡片墙 + 排序 + 搜索
-- [ ] M4 脱敏开关（构建期能力，默认全量输出）
+- [x] M4 脱敏开关：`collect:private` 不输出 `remark`（默认仍全量）
 - [ ] M5 CF Pages 部署（**必须 CF Access 或口令**）
 - [ ] M6（可选）域名购买与绑定
