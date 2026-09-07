@@ -79,18 +79,15 @@ interface Member {
 /**
  * --private 时从每条成员记录中删除的字段。
  * 目的：保护群成员隐私，使 members.json 可直接分享给群成员。
- * 新增需脱敏的字段只改这一处：类型、剥离逻辑、日忘、config.omittedFields 全部由此派生。
+ * 新增需脱敏的字段只改这一行；元素必须是 Member 的字段名，写错 typecheck 报错。
  */
-const PRIVATE_STRIPPED_FIELDS = ["remark"] as const satisfies readonly (keyof Member)[];
+const PRIVATE_STRIPPED_FIELDS: (keyof Member)[] = ["remark"];
 
-type PrivateStrippedField = (typeof PRIVATE_STRIPPED_FIELDS)[number];
-/** 隐私模式下的成员记录 */
-type PrivateMember = Omit<Member, PrivateStrippedField>;
-
-function stripPrivateFields(m: Member): PrivateMember {
-  const out: Record<string, unknown> = { ...m };
-  for (const f of PRIVATE_STRIPPED_FIELDS) delete out[f];
-  return out as PrivateMember;
+/** 返回删掉清单字段后的副本；Partial = 每个字段都可能不存在 */
+function stripPrivateFields(m: Member): Partial<Member> {
+  const copy: Partial<Member> = { ...m };
+  for (const f of PRIVATE_STRIPPED_FIELDS) delete copy[f];
+  return copy;
 }
 
 interface MembersOutput {
@@ -101,10 +98,11 @@ interface MembersOutput {
     dataCutoff: string;
     memberCount: number;
     countingRule: string;
-    /** 隐私模式下被删除的字段；全量模式为 []。让产物自描述，展示层据此处理可选字段 */
-    omittedFields: readonly PrivateStrippedField[];
+    /** 本文件删了哪些字段；全量模式为 []。让产物自描述，展示层据此处理可选字段 */
+    omittedFields: (keyof Member)[];
   };
-  members: Member[] | PrivateMember[];
+  /** 全量模式为完整 Member；隐私模式下 omittedFields 所列字段不存在 */
+  members: Partial<Member>[];
 }
 
 // ---------- CLI ----------

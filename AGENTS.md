@@ -112,7 +112,7 @@ wegroup-members/
 - **公开字段决策（2026-09-06，本人拍板）**：`alias`、`wxid`、`remark` 均允许进入公开产物；头像文件名直接用 wxid（无需 hash）
 - 注意：CF Pages 部署即数据可见（受访问控制约束，见部署节）。上线前仍需征得群成员/群主同意
 - **隐私模式**：`pnpm collect:private`（`--private`）。目的是保护群成员隐私，使 `members.json` 可直接分享给群成员；默认 `pnpm collect` 仍全量输出
-  - **删除字段清单只有一个事实来源**：`scripts/collect.ts` 的 `PRIVATE_STRIPPED_FIELDS`（当前：`remark`）。它经 `satisfies (keyof Member)[]` 约束，写错字段名或字段已从 schema 删除时 `typecheck` 直接报错；剥离逻辑、日忘、`config.omittedFields` 全部由它派生。日后要收紧更多字段（如 `alias`）只改这一行
+  - **删除字段清单只有一个事实来源**：`scripts/collect.ts` 的 `PRIVATE_STRIPPED_FIELDS`（当前：`remark`）。类型为 `(keyof Member)[]`，写错字段名或字段已从 schema 删除时 `typecheck` 直接报错；剥离逻辑、日忘、`config.omittedFields` 全部由它派生。日后要收紧更多字段（如 `alias`）只改这一行
   - 产物自描述：`config.omittedFields` 写明删了哪些字段，全量模式为 `[]`，展示层不硬编码
 
 ### 2. 通用性 / monorepo
