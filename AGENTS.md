@@ -29,7 +29,8 @@ wegroup-members/
 ├── tsconfig.json          # strict，noEmit，erasableSyntaxOnly（Node 原生跑 .ts，无构建步骤）
 ├── biome.json             # Biome 统一 lint + format
 ├── scripts/               # 数据采集层（本地运行）
-│   └── collect.ts         # 参数化：--config <群配置> --year <年> --out <路径> [--private]
+│   ├── collect.ts         # 参数化：--config <群配置> --year <年> --out <路径> [--avatars-dir <路径>] [--no-avatars] [--private]
+│   └── lib/avatars.ts     # M2 头像下载/校验/缓存/清理
 ├── web/                   # Web 展示层（静态站，Vite）
 │   ├── src/
 │   └── public/
@@ -55,7 +56,12 @@ wegroup-members/
    - **统计口径**：排除系统消息（type=10000）与无 sender / sender=`系统消息` 的记录；其余类型（文本 1、图片 3、视频 43、**表情包 47 算发言**、链接/引用/文件 49 等）全部计为发言。口径写入 `config.countingRule` 并在站点明示
    - **退群成员**：只输出采集时点的当前成员；已退群者的发言不计入榜单（脚本日志打印被排除的人数/条数以便核对）
    - **非法 sender**：Chatlog 对部分引用消息会把消息 XML 塞进 `sender` 字段，用 `^[A-Za-z0-9_\-@.]+$` 校验 wxid 格式，不合法的归入排除（实测约 200 条/年）
-4. 头像下载到本地 `avatars/<wxid>.png`（HTTPS + `wx.qlogo.cn` 校验 + 大小限制，失败/缺失降级首字母）
+4. 头像下载到本地 `avatars/<wxid>.<ext>`（`scripts/lib/avatars.ts`）：
+   - **准入**：URL 必须 `https://wx.qlogo.cn/`，且 wxid 经 `chatroom_member` 确认为群成员；重定向每一跳重新校验 host，最多 3 跳
+   - **响应校验**：`Content-Type: image/*` → 流式读取上限 512 KB（不信任 Content-Length）→ 魔数必须 JPEG/PNG/GIF/WEBP，扩展名按真实格式落盘（实测约 90% JPEG，`/132` 规格单张 ~3 KB）
+   - **缓存**：`data/avatar-cache.json` 记 wxid → {url, file}，URL 未变且文件在则不重下；全量 445 张首次 ~13 s，命中缓存 ~0 s
+   - **清理**：每次采集后删除目录内不属于本次成员的旧头像与残留 `.tmp`，保证磁盘文件 == members.json 引用
+   - **降级**：任一步失败 → `avatar: null`，日忘打印原因，展示层首字母占位；`--no-avatars` 可跳过下载只跑统计
 5. 产出统一 schema 的 `members.json`：
 
 ```jsonc
@@ -76,7 +82,7 @@ wegroup-members/
       "nickName": "...",      // 微信昵称
       "displayName": "...",   // 群昵称
       "remark": "...",        // 采集者备注；隐私模式下删除
-      "avatar": "...",        // 头像路径，可 null
+      "avatar": "...",        // 站点根相对路径 avatars/<wxid>.<jpg|png|gif|webp>，可 null
       "msgCount": 123         // 发言数
     }
   ]
@@ -147,8 +153,8 @@ wegroup-members/
 
 ## 实现里程碑
 
-- [ ] M1 采集脚本：群成员（chatroom API）+ 联系人信息（contact.db 只读）+ 年度发言计数（按月分片）→ `members.json`
-- [ ] M2 头像本地化：下载 / 校验 / 缓存 / 降级
+- [x] M1 采集脚本：群成员（chatroom API）+ 联系人信息（contact.db 只读）+ 年度发言计数（按月分片）→ `members.json`
+- [x] M2 头像本地化：下载 / 校验 / 缓存 / 清理 / 降级（`scripts/lib/avatars.ts`，实测 445/445）
 - [ ] M3 Web 站点：卡片墙 + 排序 + 搜索
 - [x] M4 隐私模式：`collect:private`，删除字段清单集中在 `PRIVATE_STRIPPED_FIELDS`（默认仍全量）
 - [ ] M5 CF Pages 部署（**必须 CF Access 或口令**）
