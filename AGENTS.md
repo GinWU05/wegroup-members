@@ -25,15 +25,27 @@
 ```
 wegroup-members/
 ├── AGENTS.md              # 本文件
-├── scripts/               # 数据采集层（本地运行，Node 或 Python）
-│   └── collect.*          # 参数化：--group <群名> --year <年> --out <路径>
+├── package.json           # pnpm；scripts: collect / typecheck / lint / lint:fix / format
+├── tsconfig.json          # strict，noEmit，erasableSyntaxOnly（Node 原生跑 .ts，无构建步骤）
+├── biome.json             # Biome 统一 lint + format
+├── scripts/               # 数据采集层（本地运行）
+│   └── collect.ts         # 参数化：--config <群配置> --year <年> --out <路径>
 ├── web/                   # Web 展示层（静态站，Vite）
 │   ├── src/
 │   └── public/
 │       ├── data/          # members.json（gitignore，构建时注入）
 │       └── avatars/       # 本地化头像（gitignore）
-└── .gitignore             # data/、avatars/、含群 ID 的本地配置
+├── group.local.json       # 群特定配置（gitignore）
+└── .gitignore             # data/、avatars/、*.local、*.local.json
 ```
+
+### 工程约定
+
+- **运行时**：Node ≥ 22.18，`.ts` 直接跑（原生 type stripping），不引入 tsx/ts-node/构建步骤；因此 `tsconfig` 开 `erasableSyntaxOnly`，禁用 enum / namespace / 参数属性等不可擦除语法
+- **包管理**：pnpm，`packageManager` 字段锁版本
+- **代码质量**：Biome 一个工具包 lint + format（不同时上 ESLint + Prettier）；`tsc --noEmit` 做类型检查
+- **提交前自查**：`pnpm lint:fix && pnpm typecheck`；仓库不内置 git hook，隐私防线靠 `.gitignore` 与本机本地措施
+- **常用命令**：`pnpm collect`（采集，可追加 `-- --year 2025`）/ `pnpm lint:fix` / `pnpm typecheck`
 
 ### 采集层（scripts/）
 
