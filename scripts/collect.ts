@@ -7,7 +7,8 @@
  *   2. Chatlog 已解密的 contact.db（只读）：alias / nick_name / remark / small_head_url
  *
  * 用法：
- *   pnpm collect [-- --config group.local.json --year 2026 --out web/public/data]
+ *   pnpm collect         [-- --config group.local.json --year 2026 --out web/public/data]
+ *   pnpm collect:private   —— 隐私模式（--private）：members.json 不输出 remark 字段
  *
  * 产出：
  *   <out>/members.json            —— 站点数据（含全部字段，公开口径见 AGENTS.md）
@@ -62,13 +63,13 @@ interface ContactRow {
   small_head_url: string | null;
 }
 
-/** members.json 单条成员，schema 见 AGENTS.md */
+/** members.json 单条成员，schema 见 AGENTS.md；隐私模式（--private）下无 remark 字段 */
 interface Member {
   wxid: string;
   alias: string;
   nickName: string;
   displayName: string;
-  remark: string;
+  remark?: string;
   avatar: string | null;
   msgCount: number;
 }
@@ -91,6 +92,8 @@ interface CliArgs {
   config: string;
   year: number;
   out: string;
+  /** 隐私模式：不输出 remark（采集者备注） */
+  private: boolean;
 }
 
 function fail(msg: string): never {
@@ -103,13 +106,16 @@ function parseArgs(argv: string[]): CliArgs {
     config: "group.local.json",
     year: new Date().getFullYear(),
     out: "web/public/data",
+    private: false,
   };
   for (let i = 2; i < argv.length; i++) {
     const key = argv[i];
     const val = argv[i + 1];
+    if (key === "--") continue; // pnpm run xxx -- <args> 透传的分隔符
     if (key === "--config" && val) args.config = argv[++i] as string;
     else if (key === "--year" && val) args.year = Number(argv[++i]);
     else if (key === "--out" && val) args.out = argv[++i] as string;
+    else if (key === "--private") args.private = true;
     else fail(`未知或缺值参数: ${key}`);
   }
   if (!Number.isInteger(args.year) || args.year < 2000 || args.year > 2100) {
@@ -120,6 +126,7 @@ function parseArgs(argv: string[]): CliArgs {
 
 const args = parseArgs(process.argv);
 const log = (...xs: unknown[]): void => console.error("[collect]", ...xs);
+if (args.private) log("隐私模式：members.json 不输出 remark");
 
 // ---------- 配置 ----------
 
@@ -264,7 +271,8 @@ for (const [wxid, displayName] of currentMembers) {
     nickName: c?.nick_name ?? "",
     // 纯群昵称（chatroom API），未设置为 ""；不用消息 senderName 兜底（它会混入我方 remark），回退交给展示层
     displayName,
-    remark: c?.remark ?? "",
+    // 隐私模式不输出 remark（整个字段省略，而非置空）
+    ...(args.private ? {} : { remark: c?.remark ?? "" }),
     avatar: avatarOk ? `avatars/${wxid}.png` : null,
     msgCount: speakers.get(wxid) ?? 0,
   });

@@ -1,23 +1,24 @@
 {
-	"name": "wegroup-members",
-	"version": "0.1.0",
-	"private": true,
-	"description": "微信群成员信息收集与展示站：Chatlog → members.json → 静态站",
-	"type": "module",
-	"engines": {
-		"node": ">=22.18"
-	},
-	"packageManager": "pnpm@10.23.0",
-	"scripts": {
-		"collect": "node --disable-warning=ExperimentalWarning scripts/collect.ts",
-		"typecheck": "tsc --noEmit",
-		"lint": "biome check .",
-		"lint:fix": "biome check --write .",
-		"format": "biome format --write ."
-	},
-	"devDependencies": {
-		"@biomejs/biome": "^2.5.12",
-		"@types/node": "^22.20.1",
-		"typescript": "^7.0.2"
-	}
+  "name": "wegroup-members",
+  "version": "0.1.0",
+  "private": true,
+  "description": "微信群成员信息收集与展示站：Chatlog → members.json → 静态站",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "packageManager": "pnpm@10.23.0",
+  "scripts": {
+    "collect": "node --disable-warning=ExperimentalWarning scripts/collect.ts",
+    "collect:private": "node --disable-warning=ExperimentalWarning scripts/collect.ts --private",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.12",
+    "@types/node": "^22.20.1",
+    "typescript": "^7.0.2"
+  }
 }
