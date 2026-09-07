@@ -49,22 +49,22 @@ wegroup-members/
 ```jsonc
 {
   "config": {
-    "groupName": "...",       // string，群完整名称，来自 group.local.json；站点标题 / 顶部概览展示
-    "year": 2026,             // number，统计年份，来自 --year；统计区间 = 该年 01-01 ~ 采集日（或 12-31）
-    "collectedAt": "...",     // ISO 8601 含时区（如 2026-09-07T23:02:20+08:00），脚本运行时刻；“成员名单快照时间”
-    "dataCutoff": "...",      // ISO 8601 含时区，Chatlog 快照中该群当年最新一条消息的时间；“发言数据截止时间”，站点必须明示
-    "memberCount": 447,       // number，采集时点当前成员数，恒等于 members.length
-    "countingRule": "..."     // string，统计口径自述（人读文案），站点页脚原文展示
+    "groupName": "...",       // 群名
+    "year": 2026,             // 统计年份
+    "collectedAt": "...",     // 采集时间
+    "dataCutoff": "...",      // 数据截止时间
+    "memberCount": 447,       // 成员数
+    "countingRule": "..."     // 统计口径
   },
-  "members": [                // 已按 msgCount 降序，同分按 wxid 升序；只含采集时点的当前成员
+  "members": [                // 按 msgCount 降序
     {
-      "wxid": "...",          // string，微信内部唯一 id（主键）。两种形态：系统分配的 wxid_xxx，或用户早年自设的原始微信号（此时它本身就是可搜索的微信号）
-      "alias": "...",         // string，用户后来设置的微信号，来自 contact.db；未设置或微信未下发（非好友大多如此）为 ""。实测仅 ~8% 有值
-      "nickName": "...",      // string，微信昵称（用户全局设置），来自 contact.db；实测 100% 有值，是展示名的最终保底
-      "displayName": "...",   // string，群内昵称（用户针对本群设置），来自 chatroom API；未设置为 ""（实测约一半为空）
-      "remark": "...",        // string，我方（采集者）给该人打的备注，来自 contact.db；未备注为 ""。已拍板可公开
-      "avatar": "...",        // string | null，相对站点根的本地头像路径 avatars/<wxid>.png；contact.db 无有效 wx.qlogo.cn URL 时为 null → 展示层渲染首字母占位
-      "msgCount": 123         // number ≥ 0，该成员在 config.year 内的发言条数（口径见 countingRule）；不在字段名嵌年份
+      "wxid": "...",          // 微信内部 id
+      "alias": "...",         // 微信号
+      "nickName": "...",      // 微信昵称
+      "displayName": "...",   // 群昵称
+      "remark": "...",        // 采集者备注
+      "avatar": "...",        // 头像路径，可 null
+      "msgCount": 123         // 发言数
     }
   ]
 }
