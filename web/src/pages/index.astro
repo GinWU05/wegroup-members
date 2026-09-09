@@ -15,7 +15,7 @@ const isPrivateBuild = config.mode === "private";
 const sorted = [...members].sort((a, b) => b.msgCount - a.msgCount || a.wxid.localeCompare(b.wxid));
 const activeCount = members.filter((m) => m.msgCount > 0).length;
 const totalMsgs = members.reduce((s, m) => s + m.msgCount, 0);
-const title = `${config.groupName} · ${config.year} 年成员发言榜`;
+const title = `${config.groupShortName}·成员信息`;
 ---
 
 <!doctype html>

@@ -36,6 +36,8 @@ import { syncAvatars } from "./lib/avatars.ts";
 /** group.local.json */
 interface GroupConfig {
   groupName: string;
+  /** 群简称，用于页面 <title> 等窄处；可省，省略则用 groupName */
+  groupShortName?: string;
   chatroomId: string;
   chatlogBase: string;
   contactDb: string;
@@ -103,6 +105,8 @@ function stripForPublic(m: Member): Partial<Member> {
 interface MembersOutput {
   config: {
     groupName: string;
+    /** 群简称；未配置时等于 groupName */
+    groupShortName: string;
     year: number;
     collectedAt: string;
     dataCutoff: string;
@@ -178,6 +182,7 @@ for (const k of ["groupName", "chatroomId", "chatlogBase", "contactDb"] as const
   if (!cfg[k]) fail(`配置缺少字段: ${k}（${args.config}）`);
 }
 const { groupName, chatroomId, chatlogBase } = cfg as GroupConfig;
+const groupShortName = cfg.groupShortName || groupName;
 const contactDbPath = (cfg as GroupConfig).contactDb.replace(/^~(?=\/)/, homedir());
 
 // ---------- 1. 群成员列表（Chatlog chatroom API）----------
@@ -364,6 +369,7 @@ members.sort((a, b) => b.msgCount - a.msgCount || a.wxid.localeCompare(b.wxid));
 const output: MembersOutput = {
   config: {
     groupName,
+    groupShortName,
     year: args.year,
     collectedAt,
     dataCutoff,

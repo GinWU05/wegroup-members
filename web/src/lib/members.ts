@@ -17,6 +17,8 @@ export interface MemberRecord {
 
 export interface MembersConfig {
   groupName: string;
+  /** 群简称，用于 <title>；采集时未配置则等于 groupName */
+  groupShortName: string;
   year: number;
   collectedAt: string;
   dataCutoff: string;

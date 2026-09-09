@@ -75,7 +75,8 @@ wegroup-members/
 ```jsonc
 {
   "config": {
-    "groupName": "...",       // 群名
+    "groupName": "...",       // 群名（页首 h1）
+    "groupShortName": "...",  // 群简称（<title> = “<简称>·成员信息”）；group.local.json 未配置时等于 groupName
     "year": 2026,             // 统计年份
     "collectedAt": "...",     // 采集时间
     "dataCutoff": "...",      // 数据截止时间
@@ -112,7 +113,7 @@ wegroup-members/
 - 展示回退约定的实现集中在 `web/src/lib/members.ts`（`displayNameOf` / `initialOf` 用 `Intl.Segmenter` 按 grapheme 取首字，emoji 不会被劣成两半 / `hueOf` 按 wxid 哈希占位底色 / `searchTextOf`）；`remark` 是否渲染由 `config.omittedFields` 决定，public 构建产物中“备注”字样与 `remark` 字符串 0 次出现（已验证）
 - **members.json 不会被部署**：它在 `web/src/data/`，frontmatter `import` 是构建期读取，渲染完即丢；`web/dist/` 里没有任何 `.json`（每次改动后用 `find web/dist -name '*.json'` 复核）。只有 `web/public/` 下的文件会原样进产物，所以**不要把数据放进 public/**。但页面上渲染出的字段在 HTML 里就是明文，隐私防线是“不该展示的字段根本不进 members.json”（public 模式），而不是展示层隐藏
 - **private 警示横幅**：`config.mode === "private"` 时页顶 sticky 红色横幅“仅供本机预览，禁止部署”，防止误把 private 产物上线
-- 群名、年份、口径等全部来自 `config` → 换群不改代码；`<meta name="robots" content="noindex, nofollow">`
+- 群名、简称、年份、口径等全部来自 `config` → 换群不改代码（群名等字面值不写进任何入库文件，包括模板）；`<meta name="robots" content="noindex, nofollow">`
 - 页脚“关于这份数据”四条：来源（收集者自己设备的聊天记录，可能缺漏，不绝对准确仅供参考）/ 范围（年初至截止时间、只含当前成员、排序规则）/ 展示内容（均为群内对他人可见的资料，不含聊天内容；private 时追加“备注为收集者个人标注”）/ 移除方式
 - 产物体量：`index.html` 约 330 KB（447 张卡内联）+ CSS 一份 + 头像 4.3 MB；构建 ~1 s
 
