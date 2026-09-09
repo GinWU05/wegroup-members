@@ -7,7 +7,7 @@
  *   2. Chatlog 已解密的 contact.db（只读）：alias / nick_name / remark / big_head_url
  *
  * 用法：
- *   pnpm collect         [-- --config group.local.json --year 2026 --out web/public/data]
+ *   pnpm collect         [-- --config group.local.json --year 2026 --out web/src/data]
  *   pnpm collect:private   —— 隐私模式（--private）：删除 PRIVATE_STRIPPED_FIELDS 列出的字段，产物可直接分享给群成员
  *
  * 产出：
@@ -131,7 +131,7 @@ function parseArgs(argv: string[]): CliArgs {
   const args: CliArgs = {
     config: "group.local.json",
     year: new Date().getFullYear(),
-    out: "web/public/data",
+    out: "web/src/data",
     avatarsDir: "web/public/avatars",
     noAvatars: false,
     private: false,

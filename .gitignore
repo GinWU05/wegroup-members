@@ -1,10 +1,11 @@
 node_modules/
 dist/
+web/.astro/
 
 # 数据与隐私产物：绝不入库
 data/
 avatars/
-web/public/data/
+web/src/data/
 web/public/avatars/
 *.local
 *.local.json
