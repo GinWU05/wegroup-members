@@ -25,17 +25,22 @@
 ```
 wegroup-members/
 ├── AGENTS.md              # 本文件
-├── package.json           # pnpm；scripts: collect / typecheck / lint / lint:fix / format
-├── tsconfig.json          # strict，noEmit，erasableSyntaxOnly（Node 原生跑 .ts，无构建步骤）
+├── package.json           # pnpm；scripts: collect / collect:private / web:* / typecheck / lint / lint:fix / format
+├── tsconfig.json          # scripts/ 的 tsc 配置：strict，noEmit，erasableSyntaxOnly（Node 原生跑 .ts）
 ├── biome.json             # Biome 统一 lint + format
 ├── scripts/               # 数据采集层（本地运行）
 │   ├── collect.ts         # 参数化：--config <群配置> --year <年> --out <路径> [--avatars-dir <路径>] [--no-avatars] [--private]
 │   └── lib/avatars.ts     # M2 头像下载/校验/缩放/缓存/清理
-├── web/                   # Web 展示层（静态站，Vite）
+├── web/                   # Web 展示层（Astro 静态站，零 island）
+│   ├── astro.config.mjs   # output: static，build.format: file
+│   ├── tsconfig.json      # extends astro/tsconfigs/strict，由 astro check 使用
 │   ├── src/
-│   └── public/
-│       ├── data/          # members.json（gitignore，构建时注入）
-│       └── avatars/       # 本地化头像（gitignore）
+│   │   ├── pages/index.astro       # 唯一页面：概览 + 卡片墙 + 搜索/排序 <script>
+│   │   ├── components/MemberCard.astro
+│   │   ├── lib/members.ts          # schema 类型 + 展示回退约定的实现
+│   │   ├── styles/global.css
+│   │   └── data/members.json       # 构建期输入（gitignore）
+│   └── public/avatars/    # 本地化头像（gitignore）
 ├── group.local.json       # 群特定配置（gitignore）
 └── .gitignore             # data/、avatars/、*.local、*.local.json
 ```
@@ -44,9 +49,11 @@ wegroup-members/
 
 - **运行时**：Node ≥ 22.18，`.ts` 直接跑（原生 type stripping），不引入 tsx/ts-node/构建步骤；因此 `tsconfig` 开 `erasableSyntaxOnly`，禁用 enum / namespace / 参数属性等不可擦除语法
 - **包管理**：pnpm，`packageManager` 字段锁版本
-- **代码质量**：Biome 一个工具包 lint + format（不同时上 ESLint + Prettier）；`tsc --noEmit` 做类型检查
+- **代码质量**：Biome 一个工具包 lint + format（不同时上 ESLint + Prettier）。`pnpm typecheck` = `tsc --noEmit`（scripts/）+ `astro check`（web/）
+- **TypeScript 锁 6.x**：`astro check` 依赖 TS 的程序化 API，TS 7（原生编译器）尚未提供，升级前先确认 withastro/roadmap#1321
+- **Biome 与 .astro**：Biome 只能看到 frontmatter，看不到模板里的引用，所以对 `*.astro` 关掉 `noUnusedImports` / `noUnusedVariables`（误报）；模板 HTML 部分不自动格式化，手动保持整洁
 - **提交前自查**：`pnpm lint:fix && pnpm typecheck`；仓库不内置 git hook，隐私防线靠 `.gitignore` 与本机本地措施
-- **常用命令**：`pnpm collect`（采集，可追加 `-- --year 2025`）/ `pnpm collect:private`（隐私模式，产物可直接分享给群成员）/ `pnpm lint:fix` / `pnpm typecheck`
+- **常用命令**：`pnpm collect`（采集 + 头像，可追加 `-- --year 2025`）/ `pnpm collect:private`（隐私模式，产物可直接分享给群成员）/ `pnpm web:dev` / `pnpm web:build`（→ `web/dist/`）/ `pnpm web:preview` / `pnpm lint:fix` / `pnpm typecheck`
 
 ### 采集层（scripts/）
 
@@ -99,14 +106,15 @@ wegroup-members/
 
 ### Web 层（web/）
 
-- 静态站，Vite + 轻量框架（细节实现时定），读 `members.json` 渲染
-- 布局方向：顶部群概览（群名、成员数、统计年份、数据截止时间、统计口径）+ 成员卡片墙
-- 默认按年度发言次数从高到低排序，支持搜索/筛选
-- 群名、主题色等来自 `members.json` 的 `config` 字段 → 换群不改代码
+- **Astro 7 静态输出，零 island**：`members.json` 在 frontmatter 里 `import`，447 张卡片构建期渲染成 HTML；浏览器端只有一段原生 `<script>` 做过滤/重排（卡片挂 `data-search` / `data-count` / `data-name` / `data-rank`，过滤切 `hidden`，排序用 `append` 移动既有节点）。不加 React/Preact 等 island，否则丢掉零 JS 优势
+- 布局：顶部群概览（群名、成员数、今年发过言人数、发言总数、数据截止/采集时间、可展开的统计口径）+ 工具栏（搜索 / 排序：发言最多·最少·名称 / 只看发过言的）+ 成员卡片墙（auto-fill 网格，最小列宽 `min(300px, 100%)`，375px 标准手机宽已验证不溢出）
+- 展示回退约定的实现集中在 `web/src/lib/members.ts`（`displayNameOf` / `initialOf` 用 `Intl.Segmenter` 按 grapheme 取首字，emoji 不会被劣成两半 / `hueOf` 按 wxid 哈希占位底色 / `searchTextOf`）；`remark` 是否渲染由 `config.omittedFields` 决定，隐私版构建产物中“备注”字样与 `remark` 字符串 0 次出现（已验证）
+- 群名、年份、口径等全部来自 `config` → 换群不改代码；`<meta name="robots" content="noindex, nofollow">`，页脚附“如需移除自己的信息联系群主”
+- 产物体量：`index.html` 约 330 KB（447 张卡内联）+ CSS 一份 + 头像 4.3 MB；构建 ~1 s
 
 ### 部署
 
-- Cloudflare Pages，只部署 `web/` 构建产物 + JSON + 头像
+- Cloudflare Pages，只部署 `web/dist/`（已含内联数据与头像）。因为数据不在 git 里，CF Pages 的“连 git 自动构建”走不通，只能本地 `pnpm web:build` 后 `wrangler pages deploy web/dist` 直接上传（与“代码无害、数据有害”天然一致）
 - **硬规则：部署必须带 CF Access 或口令**（决策 2026-09-06）。取得群成员/群主同意后才可评估切换公开
 
 ## 关键决策记录
@@ -156,7 +164,7 @@ wegroup-members/
 
 - [x] M1 采集脚本：群成员（chatroom API）+ 联系人信息（contact.db 只读）+ 年度发言计数（按月分片）→ `members.json`
 - [x] M2 头像本地化：下载原图 / 校验 / 缩放 256 WebP / 缓存 / 清理 / 降级（`scripts/lib/avatars.ts`，实测 445/445）
-- [ ] M3 Web 站点：卡片墙 + 排序 + 搜索
+- [x] M3 Web 站点：Astro 静态卡片墙 + 搜索 / 排序 / 只看发过言的（`web/`，零 island）
 - [x] M4 隐私模式：`collect:private`，删除字段清单集中在 `PRIVATE_STRIPPED_FIELDS`（默认仍全量）
 - [ ] M5 CF Pages 部署（**必须 CF Access 或口令**）
 - [ ] M6（可选）域名购买与绑定
