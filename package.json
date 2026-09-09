@@ -9,7 +9,8 @@
   },
   "packageManager": "pnpm@10.23.0",
   "scripts": {
-    "collect": "node --disable-warning=ExperimentalWarning scripts/collect.ts",
+    "collect": "pnpm run collect:public",
+    "collect:public": "node --disable-warning=ExperimentalWarning scripts/collect.ts",
     "collect:private": "node --disable-warning=ExperimentalWarning scripts/collect.ts --private",
     "web:dev": "astro dev --root web",
     "web:build": "astro build --root web",

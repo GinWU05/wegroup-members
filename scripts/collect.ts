@@ -7,8 +7,10 @@
  *   2. Chatlog 已解密的 contact.db（只读）：alias / nick_name / remark / big_head_url
  *
  * 用法：
- *   pnpm collect         [-- --config group.local.json --year 2026 --out web/src/data]
- *   pnpm collect:private   —— 隐私模式（--private）：删除 PRIVATE_STRIPPED_FIELDS 列出的字段，产物可直接分享给群成员
+ *   pnpm collect            —— 等于 collect:public
+ *   pnpm collect:public     —— 默认模式：删除 PUBLIC_STRIPPED_FIELDS 列出的字段，产物可部署 / 分享给群成员
+ *   pnpm collect:private    —— --private：全量输出（含 remark），仅采集者本机自用，勿部署
+ *   可追加：-- --config group.local.json --year 2026 --out web/src/data --avatars-dir web/public/avatars --no-avatars
  *
  * 产出：
  *   <out>/members.json            —— 站点数据（含全部字段，公开口径见 AGENTS.md）
@@ -77,19 +79,24 @@ interface Member {
   msgCount: number;
 }
 
-// ---------- 隐私模式字段清单（唯一事实来源）----------
+// ---------- 输出模式与字段清单（唯一事实来源）----------
 
 /**
- * --private 时从每条成员记录中删除的字段。
- * 目的：保护群成员隐私，使 members.json 可直接分享给群成员。
+ * public（默认）：产物可部署 / 分享给群成员，删除 PUBLIC_STRIPPED_FIELDS
+ * private（--private）：全量输出，仅采集者本机自用，勿部署
+ */
+type OutputMode = "public" | "private";
+
+/**
+ * public 模式下从每条成员记录中删除的字段（采集者私有视角的信息，不属于群成员自己）。
  * 新增需脱敏的字段只改这一行；元素必须是 Member 的字段名，写错 typecheck 报错。
  */
-const PRIVATE_STRIPPED_FIELDS: (keyof Member)[] = ["remark"];
+const PUBLIC_STRIPPED_FIELDS: (keyof Member)[] = ["remark"];
 
 /** 返回删掉清单字段后的副本；Partial = 每个字段都可能不存在 */
-function stripPrivateFields(m: Member): Partial<Member> {
+function stripForPublic(m: Member): Partial<Member> {
   const copy: Partial<Member> = { ...m };
-  for (const f of PRIVATE_STRIPPED_FIELDS) delete copy[f];
+  for (const f of PUBLIC_STRIPPED_FIELDS) delete copy[f];
   return copy;
 }
 
@@ -101,10 +108,12 @@ interface MembersOutput {
     dataCutoff: string;
     memberCount: number;
     countingRule: string;
-    /** 本文件删了哪些字段；全量模式为 []。让产物自描述，展示层据此处理可选字段 */
+    /** 本文件的输出模式；展示层在 private 时显示警示，部署步骤据此拒绝上传 */
+    mode: OutputMode;
+    /** 本文件删了哪些字段；private 模式为 []。展示层据此处理可选字段 */
     omittedFields: (keyof Member)[];
   };
-  /** 全量模式为完整 Member；隐私模式下 omittedFields 所列字段不存在 */
+  /** private 为完整 Member；public 下 omittedFields 所列字段不存在 */
   members: Partial<Member>[];
 }
 
@@ -118,8 +127,8 @@ interface CliArgs {
   avatarsDir: string;
   /** 跳过头像下载（调试统计时省时；members.json 中 avatar 全为 null） */
   noAvatars: boolean;
-  /** 隐私模式：删除 PRIVATE_STRIPPED_FIELDS 列出的字段 */
-  private: boolean;
+  /** 输出模式；默认 public，--private 全量 */
+  mode: OutputMode;
 }
 
 function fail(msg: string): never {
@@ -134,7 +143,7 @@ function parseArgs(argv: string[]): CliArgs {
     out: "web/src/data",
     avatarsDir: "web/public/avatars",
     noAvatars: false,
-    private: false,
+    mode: "public",
   };
   for (let i = 2; i < argv.length; i++) {
     const key = argv[i];
@@ -145,7 +154,7 @@ function parseArgs(argv: string[]): CliArgs {
     else if (key === "--out" && val) args.out = argv[++i] as string;
     else if (key === "--avatars-dir" && val) args.avatarsDir = argv[++i] as string;
     else if (key === "--no-avatars") args.noAvatars = true;
-    else if (key === "--private") args.private = true;
+    else if (key === "--private") args.mode = "private";
     else fail(`未知或缺值参数: ${key}`);
   }
   if (!Number.isInteger(args.year) || args.year < 2000 || args.year > 2100) {
@@ -156,7 +165,11 @@ function parseArgs(argv: string[]): CliArgs {
 
 const args = parseArgs(process.argv);
 const log = (...xs: unknown[]): void => console.error("[collect]", ...xs);
-if (args.private) log(`隐私模式：members.json 删除字段 ${PRIVATE_STRIPPED_FIELDS.join(", ")}`);
+if (args.mode === "public") {
+  log(`public 模式：删除字段 ${PUBLIC_STRIPPED_FIELDS.join(", ")}，产物可部署 / 分享`);
+} else {
+  log("⚠ private 模式：全量输出（含 remark），仅本机自用，勿部署 / 分享");
+}
 
 // ---------- 配置 ----------
 
@@ -357,9 +370,10 @@ const output: MembersOutput = {
     memberCount: currentMembers.size,
     countingRule:
       "统计当年群内全部消息，排除系统消息（撤回/入退群提示等）；文本、图片、视频、表情包、链接与引用均计为发言。仅统计采集时的当前群成员，已退群者不计入。",
-    omittedFields: args.private ? PRIVATE_STRIPPED_FIELDS : [],
+    mode: args.mode,
+    omittedFields: args.mode === "public" ? PUBLIC_STRIPPED_FIELDS : [],
   },
-  members: args.private ? members.map(stripPrivateFields) : members,
+  members: args.mode === "public" ? members.map(stripForPublic) : members,
 };
 
 const outDir = resolve(args.out);

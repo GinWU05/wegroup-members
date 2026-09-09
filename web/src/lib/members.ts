@@ -8,7 +8,7 @@ export interface MemberRecord {
   alias: string;
   nickName: string;
   displayName: string;
-  /** 采集者备注；隐私模式下整个字段不存在（见 config.omittedFields） */
+  /** 采集者备注；public 模式（默认）下整个字段不存在（见 config.omittedFields） */
   remark?: string;
   /** 站点根相对路径 avatars/<wxid>.webp；无头像为 null */
   avatar: string | null;
@@ -22,6 +22,9 @@ export interface MembersConfig {
   dataCutoff: string;
   memberCount: number;
   countingRule: string;
+  /** public：可部署 / 分享；private：含采集者私有字段，仅本机预览 */
+  mode: "public" | "private";
+  /** 本文件删除了哪些成员字段 */
   omittedFields: string[];
 }
 
