@@ -1,0 +1,145 @@
+---
+import { displayNameOf, hueOf, initialOf, type MemberRecord, searchTextOf } from "../lib/members";
+
+interface Props {
+  member: MemberRecord;
+  rank: number;
+  showRemark: boolean;
+}
+
+const { member: m, rank, showRemark } = Astro.props;
+const name = displayNameOf(m);
+const hue = hueOf(m.wxid);
+// 副标题：群昵称与微信昵称不同时补充微信昵称，避免重复显示
+const subtitle = m.displayName && m.nickName && m.displayName !== m.nickName ? m.nickName : "";
+const remark = showRemark ? (m.remark ?? "") : "";
+---
+
+<li
+  class="card"
+  data-search={searchTextOf(m)}
+  data-count={m.msgCount}
+  data-name={name.toLowerCase()}
+  data-rank={rank}
+>
+  <div class="avatar" style={`--hue: ${hue}`}>
+    {
+      m.avatar ? (
+        <img src={`/${m.avatar}`} alt="" width="64" height="64" loading="lazy" decoding="async" />
+      ) : (
+        <span class="initial" aria-hidden="true">{initialOf(name)}</span>
+      )
+    }
+  </div>
+  <div class="body">
+    <div class="title-row">
+      <span class="rank">#{rank}</span>
+      <h3 class="name" title={name}>{name}</h3>
+    </div>
+    {subtitle && <p class="sub" title={subtitle}>{subtitle}</p>}
+    {m.alias && <p class="alias">微信号 {m.alias}</p>}
+    {remark && <p class="remark">备注 {remark}</p>}
+  </div>
+  <div class="count" title={`${m.msgCount} 条发言`}>
+    <span class="num">{m.msgCount.toLocaleString("zh-CN")}</span>
+    <span class="unit">条</span>
+  </div>
+</li>
+
+<style>
+  .card {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 0.9rem;
+    align-items: center;
+    padding: 0.85rem 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    transition: border-color 0.15s;
+  }
+  .card:hover {
+    border-color: var(--border-strong);
+  }
+  .card[hidden] {
+    display: none;
+  }
+
+  .avatar {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    overflow: hidden;
+    flex: none;
+    display: grid;
+    place-items: center;
+    background: hsl(var(--hue) 55% 88%);
+    color: hsl(var(--hue) 50% 32%);
+    font-weight: 600;
+    font-size: 1.35rem;
+  }
+  .avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  @media (prefers-color-scheme: dark) {
+    .avatar {
+      background: hsl(var(--hue) 35% 26%);
+      color: hsl(var(--hue) 60% 82%);
+    }
+  }
+
+  .body {
+    min-width: 0;
+  }
+  .title-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    min-width: 0;
+  }
+  .rank {
+    flex: none;
+    font-size: 0.75rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .name {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .sub,
+  .alias,
+  .remark {
+    margin: 0.15rem 0 0;
+    font-size: 0.8rem;
+    color: var(--muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .remark {
+    color: var(--accent);
+  }
+
+  .count {
+    text-align: right;
+    flex: none;
+    font-variant-numeric: tabular-nums;
+  }
+  .num {
+    font-size: 1.15rem;
+    font-weight: 700;
+  }
+  .unit {
+    font-size: 0.75rem;
+    color: var(--muted);
+    margin-left: 0.15rem;
+  }
+</style>

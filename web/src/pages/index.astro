@@ -1,0 +1,272 @@
+---
+import MemberCard from "../components/MemberCard.astro";
+import raw from "../data/members.json";
+import { formatDateTime, type MembersData } from "../lib/members";
+import "../styles/global.css";
+
+const data = raw as MembersData;
+const { config, members } = data;
+
+// 隐私模式产物：omittedFields 列出的字段不存在。展示层据此决定是否渲染，不硬编码字段名
+const showRemark = !config.omittedFields.includes("remark");
+
+const sorted = [...members].sort((a, b) => b.msgCount - a.msgCount || a.wxid.localeCompare(b.wxid));
+const activeCount = members.filter((m) => m.msgCount > 0).length;
+const totalMsgs = members.reduce((s, m) => s + m.msgCount, 0);
+const title = `${config.groupName} · ${config.year} 年成员发言榜`;
+---
+
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>{title}</title>
+  </head>
+  <body>
+    <header class="hero">
+      <div class="wrap">
+        <p class="eyebrow">{config.year} 年度</p>
+        <h1>{config.groupName}</h1>
+        <dl class="stats">
+          <div><dt>成员</dt><dd>{config.memberCount.toLocaleString("zh-CN")}</dd></div>
+          <div><dt>今年发过言</dt><dd>{activeCount.toLocaleString("zh-CN")}</dd></div>
+          <div><dt>发言总数</dt><dd>{totalMsgs.toLocaleString("zh-CN")}</dd></div>
+        </dl>
+        <p class="meta">
+          数据截止 <time datetime={config.dataCutoff}>{formatDateTime(config.dataCutoff)}</time>
+          · 采集于 <time datetime={config.collectedAt}>{formatDateTime(config.collectedAt)}</time>
+        </p>
+        <details class="rule">
+          <summary>统计口径</summary>
+          <p>{config.countingRule}</p>
+        </details>
+      </div>
+    </header>
+
+    <main class="wrap">
+      <form class="toolbar" role="search" onsubmit="return false">
+        <label class="search">
+          <span class="sr-only">搜索成员</span>
+          <input
+            id="q"
+            type="search"
+            placeholder={showRemark ? "搜索群昵称 / 微信昵称 / 微信号 / 备注" : "搜索群昵称 / 微信昵称 / 微信号"}
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </label>
+        <label class="sort">
+          <span class="sr-only">排序</span>
+          <select id="sort">
+            <option value="count-desc" selected>发言最多</option>
+            <option value="count-asc">发言最少</option>
+            <option value="name-asc">名称 A→Z</option>
+          </select>
+        </label>
+        <label class="toggle">
+          <input id="active-only" type="checkbox" />
+          只看发过言的
+        </label>
+        <span id="shown" class="shown" aria-live="polite"></span>
+      </form>
+
+      <ol id="list" class="grid">
+        {sorted.map((m, i) => <MemberCard member={m} rank={i + 1} showRemark={showRemark} />)}
+      </ol>
+      <p id="empty" class="empty" hidden>没有匹配的成员</p>
+    </main>
+
+    <footer class="wrap foot">
+      <p>
+        排名按 {config.year} 年发言条数，同分按 wxid 排序。头像与名称来自微信公开资料；如需移除自己的信息请联系群主。
+      </p>
+    </footer>
+
+    <script>
+      // 零依赖：所有卡片已在构建期渲染，这里只做过滤与重排
+      const q = document.getElementById("q") as HTMLInputElement;
+      const sortSel = document.getElementById("sort") as HTMLSelectElement;
+      const activeOnly = document.getElementById("active-only") as HTMLInputElement;
+      const list = document.getElementById("list") as HTMLOListElement;
+      const empty = document.getElementById("empty") as HTMLElement;
+      const shown = document.getElementById("shown") as HTMLElement;
+      const cards = Array.from(list.querySelectorAll<HTMLLIElement>(".card"));
+      const total = cards.length;
+
+      const countOf = (c: HTMLLIElement) => Number(c.dataset.count ?? 0);
+      const rankOf = (c: HTMLLIElement) => Number(c.dataset.rank ?? 0);
+      const nameOf = (c: HTMLLIElement) => c.dataset.name ?? "";
+      const collator = new Intl.Collator("zh", { numeric: true, sensitivity: "base" });
+
+      const sorters: Record<string, (a: HTMLLIElement, b: HTMLLIElement) => number> = {
+        "count-desc": (a, b) => rankOf(a) - rankOf(b),
+        "count-asc": (a, b) => countOf(a) - countOf(b) || rankOf(a) - rankOf(b),
+        "name-asc": (a, b) => collator.compare(nameOf(a), nameOf(b)),
+      };
+
+      function apply() {
+        const needle = q.value.trim().toLowerCase();
+        const onlyActive = activeOnly.checked;
+        let visible = 0;
+        for (const c of cards) {
+          const hit = (!needle || (c.dataset.search ?? "").includes(needle)) && (!onlyActive || countOf(c) > 0);
+          c.hidden = !hit;
+          if (hit) visible++;
+        }
+        const sorter = sorters[sortSel.value] ?? sorters["count-desc"];
+        list.append(...[...cards].sort(sorter)); // append 移动既有节点，不重建 DOM
+        empty.hidden = visible > 0;
+        shown.textContent = visible === total ? `共 ${total} 人` : `${visible} / ${total} 人`;
+      }
+
+      let timer = 0;
+      q.addEventListener("input", () => {
+        clearTimeout(timer);
+        timer = window.setTimeout(apply, 80);
+      });
+      sortSel.addEventListener("change", apply);
+      activeOnly.addEventListener("change", apply);
+      apply();
+    </script>
+  </body>
+</html>
+
+<style>
+  .wrap {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 0 1rem;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
+
+  .hero {
+    padding: 2.5rem 0 1.5rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+  .eyebrow {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.85rem;
+    letter-spacing: 0.08em;
+  }
+  h1 {
+    margin: 0.25rem 0 1rem;
+    font-size: clamp(1.5rem, 4vw, 2.25rem);
+    line-height: 1.2;
+  }
+  .stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem 2.5rem;
+    margin: 0;
+  }
+  .stats dt {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+  .stats dd {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+  }
+  .meta {
+    margin: 1rem 0 0.25rem;
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .rule {
+    font-size: 0.85rem;
+    color: var(--muted);
+  }
+  .rule summary {
+    cursor: pointer;
+  }
+  .rule p {
+    margin: 0.35rem 0 0;
+    max-width: 70ch;
+  }
+
+  .toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.6rem 0.9rem;
+    margin: 1.25rem 0 1rem;
+  }
+  .search {
+    flex: 1 1 240px;
+    min-width: 0;
+  }
+  .sort {
+    flex: 0 1 auto;
+    min-width: 0;
+  }
+  .toolbar input[type="search"],
+  .toolbar select {
+    width: 100%;
+    padding: 0.55rem 0.8rem;
+    border: 1px solid var(--border-strong);
+    border-radius: 10px;
+    background: var(--surface);
+  }
+  .toolbar input[type="search"]:focus,
+  .toolbar select:focus {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.9rem;
+    white-space: nowrap;
+  }
+  .shown {
+    margin-left: auto;
+    font-size: 0.85rem;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .grid {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: grid;
+    /* min(300px, 100%)：视口窄于 300px 时列宽跟随容器，不撑破页面 */
+    grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr));
+    gap: 0.75rem;
+  }
+  @media (max-width: 480px) {
+    .toolbar {
+      gap: 0.5rem;
+    }
+    .search {
+      flex-basis: 100%;
+    }
+    .shown {
+      margin-left: auto;
+    }
+  }
+  .empty {
+    text-align: center;
+    color: var(--muted);
+    padding: 3rem 0;
+  }
+  .foot {
+    padding: 2rem 1rem 3rem;
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+</style>
