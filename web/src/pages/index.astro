@@ -1,6 +1,8 @@
 ---
 import MemberCard from "../components/MemberCard.astro";
+import MsgHistogram from "../components/MsgHistogram.astro";
 import raw from "../data/members.json";
+import { buildHistogram } from "../lib/histogram";
 import {
   ACTIVE_TOP_PERCENT,
   activeThresholdOf,
@@ -23,6 +25,7 @@ const totalMsgs = members.reduce((s, m) => s + m.msgCount, 0);
 // 活跃 = 发言数排进发过言成员的前 25%；门槛与人数都从数据算出，不写死
 const activeThreshold = activeThresholdOf(members);
 const activeCount = members.filter((m) => m.msgCount >= activeThreshold).length;
+const histogram = buildHistogram(members, activeThreshold);
 const title = `${config.groupShortName}·成员信息`;
 ---
 
@@ -74,6 +77,14 @@ const title = `${config.groupShortName}·成员信息`;
     </header>
 
     <main class="wrap">
+      <section class="chart" aria-label="发言数分布">
+        <MsgHistogram
+          buckets={histogram}
+          activeThreshold={activeThreshold}
+          silentCount={members.length - spokeCount}
+        />
+      </section>
+
       <form class="toolbar" role="search" onsubmit="return false">
         <label class="search">
           <span class="sr-only">搜索成员</span>
@@ -270,6 +281,9 @@ const title = `${config.groupShortName}·成员信息`;
     max-width: 70ch;
   }
 
+  .chart {
+    margin-top: 1.25rem;
+  }
   .toolbar {
     display: flex;
     flex-wrap: wrap;
