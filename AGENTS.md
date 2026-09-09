@@ -38,9 +38,11 @@ wegroup-members/
 │   ├── astro.config.mjs   # output: static，build.format: file
 │   ├── tsconfig.json      # extends astro/tsconfigs/strict，由 astro check 使用
 │   ├── src/
-│   │   ├── pages/index.astro       # 唯一页面：概览 + 卡片墙 + 搜索/排序 <script>
+│   │   ├── pages/index.astro       # 唯一页面：概览 + 卡片墙 + 搜索/排序 <script> + 首帧防闪脚本
 │   │   ├── components/MemberCard.astro
 │   │   ├── components/MsgHistogram.astro  # 发言数分布柱状图（纯 HTML/CSS）
+│   │   ├── components/ThemeToggle.astro   # 亮/暗主题开关（胶囊滑块 + 圆形扩散过渡）
+│   │   ├── components/SaveShot.astro      # 右下角悬浮按钮：页面存为 PNG 截图（snapdom 懒加载）
 │   │   ├── lib/members.ts          # schema 类型 + 展示回退约定的实现
 │   │   ├── lib/histogram.ts        # 对数分桶算法（柱数 10~30 自适应）
 │   │   ├── styles/global.css
@@ -114,7 +116,9 @@ wegroup-members/
 
 ### Web 层（web/）
 
-- **Astro 7 静态输出，零 island**：`members.json` 在 frontmatter 里 `import`，447 张卡片构建期渲染成 HTML；浏览器端只有一段原生 `<script>` 做过滤/重排（卡片挂 `data-search` / `data-count` / `data-name` / `data-rank`，过滤切 `hidden`，排序用 `append` 移动既有节点）。不加 React/Preact 等 island，否则丢掉零 JS 优势
+- **Astro 7 静态输出，零 island**：`members.json` 在 frontmatter 里 `import`，447 张卡片构建期渲染成 HTML；浏览器端只有原生 `<script>`（过滤/重排、主题切换、截图）做增强（卡片挂 `data-search` / `data-count` / `data-name` / `data-rank`，过滤切 `hidden`，排序用 `append` 移动既有节点）。不加 React/Preact 等 island，否则丢掉零 JS 优势
+- **主题切换**（`ThemeToggle.astro`，2026-09-09）：Element Plus 文档站同款胶囊开关（滑块内太阳/月亮）+ View Transitions 从点击点圆形扩散（不支持或 reduced-motion 时直接切）。三态设计：未手动选择时跟随系统（`prefers-color-scheme`），手动选后 `<html>` 挂 `.light`/`.dark` 类并存 `localStorage("theme")`，`index.astro` `<head>` 内联防闪脚本在 CSS 前同步恢复。主题变量集中在 `global.css`：暗色变量写两处（`@media` 跟随系统分支 + `.dark` 手动分支，内容须保持一致）；奉牌色、头像占位色也提升为全局变量，组件内不再写 `prefers-color-scheme`。切换后同步 `aria-checked` 与 `<meta name=theme-color>`
+- **页面存截图**（`SaveShot.astro`，2026-09-09）：右下角相机 FAB，把整页（含当前搜索/筛选/主题状态）存为 PNG，文件名 `<页题> <日期>.png`。用 snapdom（html2canvas 现代替代，唯一运行时 web 依赖），首次点击才动态 `import`（Vite 自动分包 ~160 KB chunk，不进首屏关键路径）。画布预算：像素总量 64M / 单边 30k 超限时先降 dpr 再整体缩放，防长页撞 canvas 上限出空白图；FAB 自身用 `exclude` 不入镜；失败挂红态 1.5s，busy 态转 spinner。实测 1280px 视口下 447 卡整页 1280×16189 约 5 MB
 - 布局：顶部群概览（简称标题、成员数、今年发过言人数、活跃成员数、发言总数、数据截止/采集时间、可展开的统计口径；窄屏指标 2×2）+ 发言数分布柱状图 + 工具栏（搜索 / 排序：发言最多·最少·名称 / 范围：全部成员·活跃成员·有发言的）+ 成员卡片墙（auto-fill 网格，最小列宽 `min(300px, 100%)`，375px 标准手机宽已验证不溢出）
 - **活跃成员**：发言数排进发过言成员的前 25%（P75 分位向上取整；`activeThresholdOf`，百分比常量 `ACTIVE_TOP_PERCENT`）。0 条者不参与计算——半数以上成员 0 条，算进去门槛会被压到 0。门槛构建期算好，卡片挂 `data-active` + `.active`（头像强调色描边、发言数强调色），概览与统计口径里写明当次门槛，浏览器端不重算
 - **发言数分布柱状图**（`MsgHistogram.astro` + `lib/histogram.ts`）：X = 发言条数（对数刻度），Y = 人数；每根柱按活跃/其他两色堆叠，一眼看出门槛落在哪里。分界点只用 1-2-5 类“顺眼”数（`MANTISSA_SETS` 由疏到密四组），选最疏一组使柱数落在 `MIN_BARS`~`MAX_BARS`（10~30），换群不调参；实测最大 3 万条 → 14 根。0 条者放不进对数轴，图下注释写人数。纯 HTML/CSS（flex 高度百分比）不用 SVG，因为 SVG viewBox 缩放会把手机端文字缩到看不见；窄屏且 ≥ 12 根时隐去柱顶数值、x 轴标签隔一显一（title/sr-only 仍全）
@@ -124,7 +128,7 @@ wegroup-members/
 - **private 警示横幅**：`config.mode === "private"` 时页顶 sticky 红色横幅“仅供本机预览，禁止部署”，防止误把 private 产物上线
 - 群名、简称、年份、口径等全部来自 `config` → 换群不改代码（群名等字面值不写进任何入库文件，包括模板）；`<meta name="robots" content="noindex, nofollow">`
 - 页脚“关于这份数据”四条：来源（收集者自己设备的聊天记录，可能缺漏，不绝对准确仅供参考）/ 范围（年初至截止时间、只含当前成员、排序规则）/ 展示内容（均为群内对他人可见的资料，不含聊天内容；private 时追加“备注为收集者个人标注”）/ 移除方式
-- 产物体量：`index.html` 约 330 KB（447 张卡内联）+ CSS 一份 + 头像 4.3 MB；构建 ~1 s
+- 产物体量：`index.html` 约 360 KB（447 张卡内联）+ CSS 一份 + 截图 JS 两份（入口 2 KB + snapdom chunk 159 KB，懒加载）+ 头像 4.3 MB；构建 ~1 s
 
 ### 部署
 

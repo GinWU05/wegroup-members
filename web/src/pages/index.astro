@@ -1,6 +1,8 @@
 ---
 import MemberCard from "../components/MemberCard.astro";
 import MsgHistogram from "../components/MsgHistogram.astro";
+import SaveShot from "../components/SaveShot.astro";
+import ThemeToggle from "../components/ThemeToggle.astro";
 import raw from "../data/members.json";
 import { buildHistogram } from "../lib/histogram";
 import {
@@ -46,6 +48,16 @@ const title = `${config.groupShortName}·成员信息`;
     <meta name="color-scheme" content="light dark" />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f7f9" />
     <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f1216" />
+    <script is:inline>
+      // 首帧防闪：在 CSS 生效前把手动选过的主题写到 <html>；没选过则不加类，跟随系统。
+      // 必须内联同步执行，逻辑与 ThemeToggle.astro 的 apply() 对应。
+      try {
+        var __t = localStorage.getItem("theme");
+        if (__t === "dark" || __t === "light") document.documentElement.classList.add(__t);
+      } catch (_) {
+        /* storage 不可用则跟随系统 */
+      }
+    </script>
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="/favicon.png" />
     <title>{title}</title>
@@ -60,7 +72,10 @@ const title = `${config.groupShortName}·成员信息`;
     }
     <header class="hero">
       <div class="wrap">
-        <p class="eyebrow">{config.year} 年度</p>
+        <div class="hero-top">
+          <p class="eyebrow">{config.year} 年度</p>
+          <ThemeToggle />
+        </div>
         <h1>{title}</h1>
         <dl class="stats">
           <div><dt>成员</dt><dd>{config.memberCount.toLocaleString("zh-CN")}</dd></div>
@@ -158,6 +173,8 @@ const title = `${config.groupShortName}·成员信息`;
       </ul>
     </footer>
 
+    <SaveShot />
+
     <script>
       // 零依赖：所有卡片已在构建期渲染，这里只做过滤与重排
       const q = document.getElementById("q") as HTMLInputElement;
@@ -235,6 +252,12 @@ const title = `${config.groupShortName}·成员信息`;
     padding: 2.5rem 0 1.5rem;
     border-bottom: 1px solid var(--border);
     background: var(--surface);
+  }
+  .hero-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
   }
   .eyebrow {
     margin: 0;

@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@zumer/snapdom':
+        specifier: ^2.24.16
+        version: 2.24.16
       sharp:
         specifier: ^0.35.4
         version: 0.35.4(@types/node@22.20.1)
@@ -1154,6 +1157,9 @@ packages:
 
   '@vscode/l10n@0.0.18':
     resolution: {integrity: sha512-KYSIHVmslkaCDyw013pphY+d7x1qV8IZupYfeIfzNA+nsaWHbn5uPuQRvdRFsa9zFzGeudPuoGoZ1Op4jrJXIQ==}
+
+  '@zumer/snapdom@2.24.16':
+    resolution: {integrity: sha512-W+WKJO/YFWj2oG4Wq0pgijp9fbWb72N92muxqtAbp+l4SVVYKTJHjgWvathXZ6v8CqHdDkzCI6jnsJjv0UpNfA==}
 
   ajv-draft-04@1.0.0:
     resolution: {integrity: sha512-mv00Te6nmYbRp5DCwclxtt7yV/joXJPGS7nM+97GdxvuttCOfgI3K4U25zboyeX0O+myI8ERluxQe5wljMmVIw==}
@@ -3040,6 +3046,8 @@ snapshots:
       vscode-uri: 3.2.0
 
   '@vscode/l10n@0.0.18': {}
+
+  '@zumer/snapdom@2.24.16': {}
 
   ajv-draft-04@1.0.0(ajv@8.20.0):
     optionalDependencies:

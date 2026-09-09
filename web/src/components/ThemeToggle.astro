@@ -1,0 +1,152 @@
+---
+// 亮/暗主题开关（Element Plus 文档站同款交互）：
+// - 胶囊开关，滑块内太阳/月亮图标随主题切换
+// - 点击时用 View Transitions 从点击点做圆形扩散过渡（不支持或 reduced-motion 时直接切）
+// - 选择持久化到 localStorage("theme")；首帧防闪脚本在 index.astro <head>（须先于 CSS 生效）
+// - 未手动选择时跟随系统（global.css 的 prefers-color-scheme 分支），滑块位置由同一媒体查询驱动
+---
+
+<button
+  id="theme-toggle"
+  class="theme-toggle"
+  type="button"
+  role="switch"
+  aria-checked="false"
+  aria-label="切换深色模式"
+  title="切换亮/暗主题"
+>
+  <span class="knob" aria-hidden="true">
+    <svg class="icon sun" viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+      <circle cx="12" cy="12" r="4.5" />
+      <path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M19.1 4.9l-1.8 1.8M6.7 17.3l-1.8 1.8" />
+    </svg>
+    <svg class="icon moon" viewBox="0 0 24 24" width="12" height="12" fill="currentColor">
+      <path d="M20.3 14.6A8.5 8.5 0 0 1 9.4 3.7a.6.6 0 0 0-.8-.74 9.5 9.5 0 1 0 12.44 12.44.6.6 0 0 0-.74-.8Z" />
+    </svg>
+  </span>
+</button>
+
+<script>
+  const btn = document.getElementById("theme-toggle") as HTMLButtonElement;
+  const html = document.documentElement;
+  const sysDark = matchMedia("(prefers-color-scheme: dark)");
+  // View Transitions API：TS DOM lib 可能尚未收录，收窄成本地类型做特性检测
+  const doc = document as Document & {
+    startViewTransition?: (update: () => void) => { ready: Promise<void> };
+  };
+
+  const isDark = () =>
+    html.classList.contains("dark") || (!html.classList.contains("light") && sysDark.matches);
+
+  function apply(theme: "light" | "dark") {
+    html.classList.toggle("dark", theme === "dark");
+    html.classList.toggle("light", theme === "light");
+    try {
+      localStorage.setItem("theme", theme);
+    } catch {
+      /* 隐私模式等 storage 不可用：本次会话内仍生效 */
+    }
+    sync();
+  }
+
+  /** 把开关状态与 <meta name=theme-color> 对齐到当前生效主题（手动覆盖后媒体查询版 meta 会失准） */
+  function sync() {
+    const dark = isDark();
+    btn.setAttribute("aria-checked", String(dark));
+    // 与 global.css 的 --bg 保持一致
+    const color = dark ? "#0f1216" : "#f6f7f9";
+    for (const m of document.querySelectorAll('meta[name="theme-color"]')) {
+      m.setAttribute("content", color);
+    }
+  }
+
+  btn.addEventListener("click", (e) => {
+    const next = isDark() ? "light" : "dark";
+    const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!doc.startViewTransition || reduceMotion) {
+      apply(next);
+      return;
+    }
+    // 键盘触发时 clientX/Y 为 0，退到按钮中心
+    const rect = btn.getBoundingClientRect();
+    const x = e.clientX || rect.left + rect.width / 2;
+    const y = e.clientY || rect.top + rect.height / 2;
+    const r = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+    // 新快照从点击点圆形放大盖住旧快照；默认交叉淡入已在 global.css 关闭
+    doc.startViewTransition(() => apply(next)).ready.then(() => {
+      html.animate(
+        { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
+        { duration: 350, easing: "ease-out", pseudoElement: "::view-transition-new(root)" },
+      );
+    });
+  });
+
+  // 跟随系统模式下系统切换时，开关位置与 meta 同步跟走
+  sysDark.addEventListener("change", sync);
+  sync();
+</script>
+
+<style>
+  .theme-toggle {
+    position: relative;
+    flex: none;
+    width: 40px;
+    height: 22px;
+    padding: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: 11px;
+    background: var(--bg);
+    cursor: pointer;
+    transition: border-color 0.15s;
+  }
+  .theme-toggle:hover {
+    border-color: var(--accent);
+  }
+  .theme-toggle:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+  .knob {
+    position: absolute;
+    top: 1px;
+    left: 1px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--surface);
+    box-shadow: 0 1px 2px rgb(0 0 0 / 0.2);
+    display: grid;
+    place-items: center;
+    color: var(--muted);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .icon {
+    grid-area: 1 / 1;
+    transition: opacity 0.15s;
+  }
+  .moon {
+    opacity: 0;
+  }
+
+  /* 滑到右侧 + 换月亮：手动 .dark，或未手动选择时跟随系统深色（与 global.css 同一套条件） */
+  :global(html.dark) .knob {
+    transform: translateX(18px);
+  }
+  :global(html.dark) .sun {
+    opacity: 0;
+  }
+  :global(html.dark) .moon {
+    opacity: 1;
+  }
+  @media (prefers-color-scheme: dark) {
+    :global(html:not(.light)) .knob {
+      transform: translateX(18px);
+    }
+    :global(html:not(.light)) .sun {
+      opacity: 0;
+    }
+    :global(html:not(.light)) .moon {
+      opacity: 1;
+    }
+  }
+</style>

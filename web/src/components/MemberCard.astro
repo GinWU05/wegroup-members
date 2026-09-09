@@ -84,15 +84,15 @@ const remark = showRemark ? (m.remark ?? "") : "";
   .card[hidden] {
     display: none;
   }
-  /* 金银铜：奉牌色进 CSS 变量，边框、名次号、活跃描边统一引用 */
+  /* 金银铜：奉牌色进 CSS 变量，边框、名次号、活跃描边统一引用；亮暗具体色值在 global.css 随主题切换 */
   .card.top-1 {
-    --medal: #c9930a;
+    --medal: var(--medal-1);
   }
   .card.top-2 {
-    --medal: #7d8da1;
+    --medal: var(--medal-2);
   }
   .card.top-3 {
-    --medal: #b0713b;
+    --medal: var(--medal-3);
   }
   .card.top-1,
   .card.top-2,
@@ -115,17 +115,6 @@ const remark = showRemark ? (m.remark ?? "") : "";
   .card.active.top-2 .avatar,
   .card.active.top-3 .avatar {
     box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--medal);
-  }
-  @media (prefers-color-scheme: dark) {
-    .card.top-1 {
-      --medal: #e5b83c;
-    }
-    .card.top-2 {
-      --medal: #a8b4c4;
-    }
-    .card.top-3 {
-      --medal: #cf8b50;
-    }
   }
   /* 活跃成员：头像描边 + 发言数用强调色 */
   .card.active .avatar {
@@ -157,8 +146,8 @@ const remark = showRemark ? (m.remark ?? "") : "";
     flex: none;
     display: grid;
     place-items: center;
-    background: hsl(var(--hue) 55% 88%);
-    color: hsl(var(--hue) 50% 32%);
+    background: hsl(var(--hue) var(--avatar-bg-sl));
+    color: hsl(var(--hue) var(--avatar-fg-sl));
     font-weight: 600;
     font-size: 1.35rem;
   }
@@ -167,12 +156,6 @@ const remark = showRemark ? (m.remark ?? "") : "";
     height: 100%;
     object-fit: cover;
     display: block;
-  }
-  @media (prefers-color-scheme: dark) {
-    .avatar {
-      background: hsl(var(--hue) 35% 26%);
-      color: hsl(var(--hue) 60% 82%);
-    }
   }
 
   .body {

@@ -1,5 +1,5 @@
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
   --bg: #f6f7f9;
   --surface: #ffffff;
   --border: #e3e6ea;
@@ -8,12 +8,25 @@
   --muted: #6b7280;
   --accent: #2563eb;
   --accent-soft: #dbeafe;
+  /* 金银铜（MemberCard 前三名） */
+  --medal-1: #c9930a;
+  --medal-2: #7d8da1;
+  --medal-3: #b0713b;
+  /* 首字母占位头像的饱和度/亮度（色相由每卡 --hue 决定） */
+  --avatar-bg-sl: 55% 88%;
+  --avatar-fg-sl: 50% 32%;
   font-family:
     system-ui, -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
     "Noto Sans CJK SC", sans-serif;
 }
+
+/* 深色变量集出现两次：
+   1. 用户未手动选主题（<html> 无 .light/.dark 类，如禁 JS）时跟随系统；
+   2. 手动切到深色（ThemeToggle 挂 .dark 类）。
+   两处内容必须保持一致，改动请同步。 */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not(.light) {
+    color-scheme: dark;
     --bg: #0f1216;
     --surface: #171b21;
     --border: #262c35;
@@ -22,7 +35,28 @@
     --muted: #8b949e;
     --accent: #60a5fa;
     --accent-soft: #1e3a5f;
+    --medal-1: #e5b83c;
+    --medal-2: #a8b4c4;
+    --medal-3: #cf8b50;
+    --avatar-bg-sl: 35% 26%;
+    --avatar-fg-sl: 60% 82%;
   }
+}
+:root.dark {
+  color-scheme: dark;
+  --bg: #0f1216;
+  --surface: #171b21;
+  --border: #262c35;
+  --border-strong: #3a424e;
+  --text: #e6e8eb;
+  --muted: #8b949e;
+  --accent: #60a5fa;
+  --accent-soft: #1e3a5f;
+  --medal-1: #e5b83c;
+  --medal-2: #a8b4c4;
+  --medal-3: #cf8b50;
+  --avatar-bg-sl: 35% 26%;
+  --avatar-fg-sl: 60% 82%;
 }
 
 * {
@@ -45,4 +79,12 @@ input,
 select {
   font: inherit;
   color: inherit;
+}
+
+/* 主题切换的圆形扩散过渡（ThemeToggle）：关掉 View Transitions 默认的交叉淡入，
+   由脚本在新快照上做 clip-path 圆形放大动画 */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
 }
