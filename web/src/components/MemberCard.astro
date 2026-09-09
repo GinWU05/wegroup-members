@@ -19,6 +19,8 @@ interface Props {
 
 const { member: m, rank, active, showRemark } = Astro.props;
 const spoke = m.msgCount > 0;
+// 前三名（且发过言）：金银铜边框，第一名头像戴皇冠；零发言不参评（与名次规则一致）
+const medal = spoke && rank <= 3 ? rank : 0;
 const name = displayNameOf(m);
 const hue = hueOf(seedOf(m));
 // 副标题：群昵称与微信昵称不同时补充微信昵称，避免重复显示
@@ -27,21 +29,24 @@ const remark = showRemark ? (m.remark ?? "") : "";
 ---
 
 <li
-  class:list={["card", { active }]}
+  class:list={["card", { active }, medal > 0 && `top-${medal}`]}
   data-search={searchTextOf(m)}
   data-count={m.msgCount}
   data-name={name.toLowerCase()}
   data-rank={rank}
   data-active={active ? "" : undefined}
 >
-  <div class="avatar" style={`--hue: ${hue}`}>
-    {
-      m.avatar ? (
-        <img src={`/${m.avatar}`} alt="" width="64" height="64" loading="lazy" decoding="async" />
-      ) : (
-        <span class="initial" aria-hidden="true">{initialOf(name)}</span>
-      )
-    }
+  <div class="avatar-box">
+    <div class="avatar" style={`--hue: ${hue}`}>
+      {
+        m.avatar ? (
+          <img src={`/${m.avatar}`} alt="" width="64" height="64" loading="lazy" decoding="async" />
+        ) : (
+          <span class="initial" aria-hidden="true">{initialOf(name)}</span>
+        )
+      }
+    </div>
+    {medal === 1 && <span class="crown" aria-hidden="true">👑</span>}
   </div>
   <div class="body">
     <div class="title-row">
@@ -79,12 +84,69 @@ const remark = showRemark ? (m.remark ?? "") : "";
   .card[hidden] {
     display: none;
   }
+  /* 金银铜：奉牌色进 CSS 变量，边框、名次号、活跃描边统一引用 */
+  .card.top-1 {
+    --medal: #c9930a;
+  }
+  .card.top-2 {
+    --medal: #7d8da1;
+  }
+  .card.top-3 {
+    --medal: #b0713b;
+  }
+  .card.top-1,
+  .card.top-2,
+  .card.top-3 {
+    border-color: var(--medal);
+  }
+  .card.top-1:hover,
+  .card.top-2:hover,
+  .card.top-3:hover {
+    border-color: var(--medal);
+  }
+  .card.top-1 .rank,
+  .card.top-2 .rank,
+  .card.top-3 .rank {
+    color: var(--medal);
+    font-weight: 700;
+  }
+  /* 前三名的活跃描边也换成奉牌色，避免蓝金打架 */
+  .card.active.top-1 .avatar,
+  .card.active.top-2 .avatar,
+  .card.active.top-3 .avatar {
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--medal);
+  }
+  @media (prefers-color-scheme: dark) {
+    .card.top-1 {
+      --medal: #e5b83c;
+    }
+    .card.top-2 {
+      --medal: #a8b4c4;
+    }
+    .card.top-3 {
+      --medal: #cf8b50;
+    }
+  }
   /* 活跃成员：头像描边 + 发言数用强调色 */
   .card.active .avatar {
     box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
   }
   .card.active .num {
     color: var(--accent);
+  }
+
+  .avatar-box {
+    position: relative;
+    flex: none;
+  }
+  .crown {
+    position: absolute;
+    top: -0.85rem;
+    left: -0.45rem;
+    font-size: 1.2rem;
+    transform: rotate(-28deg);
+    pointer-events: none;
+    user-select: none;
   }
 
   .avatar {
