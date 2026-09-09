@@ -25,12 +25,15 @@
 ```
 wegroup-members/
 ├── AGENTS.md              # 本文件
-├── package.json           # pnpm；scripts: collect(=collect:public) / collect:private / web:* / typecheck / lint / lint:fix / format
-├── tsconfig.json          # scripts/ 的 tsc 配置：strict，noEmit，erasableSyntaxOnly（Node 原生跑 .ts）
+├── package.json           # pnpm；scripts: collect(=collect:public) / collect:private / web:* / web:deploy / typecheck / lint / lint:fix / format
+├── tsconfig.json          # scripts/ 与 functions/ 的 tsc 配置：strict，noEmit，erasableSyntaxOnly（Node 原生跑 .ts）
 ├── biome.json             # Biome 统一 lint + format
-├── scripts/               # 数据采集层（本地运行）
+├── scripts/               # 数据采集层与部署（本地运行）
 │   ├── collect.ts         # 参数化：--config <群配置> --year <年> --out <路径> [--avatars-dir <路径>] [--no-avatars] [--private]
+│   ├── deploy.ts          # M5 部署：拒 private 产物 → 构建 → 隐私复核 → wrangler pages deploy
 │   └── lib/avatars.ts     # M2 头像下载/校验/缩放/缓存/清理
+├── functions/             # Cloudflare Pages Functions，wrangler 部署时自动打包
+│   └── _middleware.ts     # 全站口令门：Secret SITE_PASSWORD + HMAC Cookie；未配置时 503 fail closed
 ├── web/                   # Web 展示层（Astro 静态站，零 island）
 │   ├── astro.config.mjs   # output: static，build.format: file
 │   ├── tsconfig.json      # extends astro/tsconfigs/strict，由 astro check 使用
@@ -44,6 +47,7 @@ wegroup-members/
 │   │   └── data/members.json       # 构建期输入（gitignore）
 │   └── public/            # 原样进产物；favicon.svg/png 入库，avatars/ gitignore。Biome 不检查此目录
 ├── group.local.json       # 群特定配置（gitignore）
+├── site-password.local    # 站点访问口令明文（gitignore；Pages Secret 的事实来源，忘口令看这里）
 └── .gitignore             # data/、avatars/、*.local、*.local.json
 ```
 
@@ -55,7 +59,7 @@ wegroup-members/
 - **TypeScript 锁 6.x**：`astro check` 依赖 TS 的程序化 API，TS 7（原生编译器）尚未提供，升级前先确认 withastro/roadmap#1321
 - **Biome 与 .astro**：Biome 只能看到 frontmatter，看不到模板里的引用，所以对 `*.astro` 关掉 `noUnusedImports` / `noUnusedVariables`（误报）；模板 HTML 部分不自动格式化，手动保持整洁
 - **提交前自查**：`pnpm lint:fix && pnpm typecheck`；仓库不内置 git hook，隐私防线靠 `.gitignore` 与本机本地措施
-- **常用命令**：`pnpm collect`（= `collect:public`，采集 + 头像，可追加 `-- --year 2025`）/ `pnpm collect:private`（全量含 remark，仅本机自用）/ `pnpm web:dev` / `pnpm web:build`（→ `web/dist/`）/ `pnpm web:preview` / `pnpm lint:fix` / `pnpm typecheck`
+- **常用命令**：`pnpm collect`（= `collect:public`，采集 + 头像，可追加 `-- --year 2025`）/ `pnpm collect:private`（全量含 remark，仅本机自用）/ `pnpm web:dev` / `pnpm web:build`（→ `web/dist/`）/ `pnpm web:preview` / `pnpm web:deploy`（构建 + 隐私复核 + 上传 CF Pages，见「部署」）/ `pnpm lint:fix` / `pnpm typecheck`
 
 ### 采集层（scripts/）
 
@@ -124,8 +128,14 @@ wegroup-members/
 
 ### 部署
 
-- Cloudflare Pages，只部署 `web/dist/`（已含内联数据与头像）。因为数据不在 git 里，CF Pages 的“连 git 自动构建”走不通，只能本地 `pnpm web:build` 后 `wrangler pages deploy web/dist` 直接上传（与“代码无害、数据有害”天然一致）
+- Cloudflare Pages，项目名 `wegroup-members`（`scripts/deploy.ts` 顶部常量），只部署 `web/dist/`（已含内联数据与头像）。因为数据不在 git 里，CF Pages 的“连 git 自动构建”走不通，只能本地构建后直接上传（与“代码无害、数据有害”天然一致）
+- **一律用 `pnpm web:deploy`（`scripts/deploy.ts`），不手敲 wrangler**：脚本先拒绝 private 模式的 members.json → 构建 → 复核 dist（无 `.json`、无 wxid/微信号/备注字样）→ 全过才 `wrangler pages deploy`；从仓库根运行，wrangler 顺带打包 `functions/` 口令门
 - **硬规则：部署必须带 CF Access 或口令**（决策 2026-09-06）。取得群成员/群主同意后才可评估切换公开
+- **口令门实现**（M5，2026-09-09）：`functions/_middleware.ts`（Pages Functions 中间件）拦截全部路径，头像等静态资源同样在门内。选口令不选 CF Access：访客是微信群成员，没有统一邮箱域可写 Access 策略；表单登录对微信内置浏览器最友好（Basic Auth 弹窗在部分 WebView 不可用）。登录页为通用文案，不含群信息（该文件入库）
+  - 口令存 Pages Secret `SITE_PASSWORD`；**明文事实来源是 `site-password.local`**（gitignore `*.local`，权限 600）。忘口令看这个文件；文件丢了 secret 也读不回来，直接写个新口令重新上传即可
+  - 换口令：改 `site-password.local` → `pnpm exec wrangler pages secret put SITE_PASSWORD --project-name wegroup-members < site-password.local` → 重新 `pnpm web:deploy`（Pages 的 secret 变更在下一次部署才生效）。Cookie 值 = HMAC-SHA256(口令, 固定消息)，无状态，换口令即全员 Cookie 立刻失效
+  - fail closed：`SITE_PASSWORD` 未配置时全站 503，绝不裸奔。上线自查四连：无 Cookie 401 / 错口令 401 / 对口令 303+Set-Cookie / 带 Cookie 头像 200
+- 自定义域：域名值属群/个人特定信息，不入库（见本地笔记）。绑定 = Pages 项目挂域名 + zone 加 proxied CNAME 指向 `wegroup-members.pages.dev`；注意 wrangler OAuth token 只有 `zone:read`，CNAME 需在 CF Dash 手动加
 
 ## 关键决策记录
 
@@ -156,6 +166,8 @@ wegroup-members/
 
 通用原则：优先短、可扩子域（`members.<domain>` / `daily.<domain>`）；三字母 SLD 在部分注册局属溢价域名，下单前到 Cloudflare Registrar / Porkbun 核实实际价格。
 
+2026-09-09：决定不购新域，复用采集者既有域名的子域（具体值见本地笔记与 CF Dash）。
+
 ### 4. 统计与成员口径（2026-09-06）
 
 - 表情包（type=47）**算**发言；系统消息（type=10000）与无 sender 记录**不算**
@@ -179,5 +191,5 @@ wegroup-members/
 - [x] M2 头像本地化：下载原图 / 校验 / 缩放 256 WebP / 缓存 / 清理 / 降级（`scripts/lib/avatars.ts`，实测 445/445）
 - [x] M3 Web 站点：Astro 静态卡片墙 + 搜索 / 排序 / 范围筛选 / 活跃标识（`web/`，零 island）
 - [x] M4 输出模式：默认 public（删 `PUBLIC_STRIPPED_FIELDS`），`collect:private` 全量仅本机；站点对 private 产物挂警示
-- [ ] M5 CF Pages 部署（**必须 CF Access 或口令**）
-- [ ] M6（可选）域名购买与绑定
+- [x] M5 CF Pages 部署：项目 `wegroup-members` + 口令门（`functions/_middleware.ts`，Secret `SITE_PASSWORD`）+ 部署脚本（`scripts/deploy.ts`：拒 private / 隐私复核 / 上传），线上验证 401 → 口令 303 → Cookie 200，头像同在门内
+- [ ] M6 自定义域绑定：复用既有域名子域（值不入库）；Pages 侧已挂、待 zone 手动加 CNAME → `wegroup-members.pages.dev`（wrangler OAuth 无 DNS 写权限）

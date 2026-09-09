@@ -115,6 +115,7 @@ pnpm web:preview
 | `pnpm web:dev` | Astro 开发服务器 |
 | `pnpm web:build` | 静态构建 → `web/dist/` |
 | `pnpm web:preview` | 预览构建产物 |
+| `pnpm web:deploy` | 构建 + 隐私复核 + 上传 Cloudflare Pages（见[部署](#%EF%B8%8F-部署)） |
 | `pnpm typecheck` | `tsc --noEmit`（scripts）+ `astro check`（web） |
 | `pnpm lint` / `pnpm lint:fix` | Biome lint（+ 自动修复） |
 | `pnpm format` | Biome 格式化 |
@@ -139,14 +140,31 @@ pnpm web:preview
 
 ## ☁️ 部署
 
-数据不在 git 里，CF Pages 的"连 git 自动构建"走不通；本地构建后直接上传产物：
+数据不在 git 里，CF Pages 的"连 git 自动构建"走不通；本地构建后直接上传产物。
+
+**硬规则：部署必须带 Cloudflare Access 或口令保护。**本仓库内置了口令门（Pages Functions 中间件 [`functions/_middleware.ts`](./functions/_middleware.ts)）：拦截全部路径（含头像），登录表单对微信内置浏览器友好，未配置口令时全站 503 fail closed。选共享口令而非 CF Access，是因为群成员没有统一邮箱域可写 Access 策略。
+
+首次部署前的一次性配置：
 
 ```bash
-pnpm collect && pnpm web:build
-wrangler pages deploy web/dist
+# 1. 创建 Pages 项目
+pnpm exec wrangler pages project create <项目名> --production-branch main
+
+# 2. 设置站点口令（明文保存在 site-password.local —— 已 gitignore ——
+#    这是唯一记录；secret 上传后无法从 Cloudflare 读回）
+pnpm exec wrangler pages secret put SITE_PASSWORD --project-name <项目名> < site-password.local
 ```
 
-**硬规则：部署必须带 Cloudflare Access 或口令保护。**
+之后部署（每次 `pnpm collect` 后重新部署）：
+
+```bash
+pnpm collect
+pnpm web:deploy
+```
+
+`pnpm web:deploy`（`scripts/deploy.ts`）会拒绝上传 private 模式产物，重新构建并复核产物（无 `.json` 文件、HTML 中无已剥离字段痕迹），全部通过才跑 `wrangler pages deploy` —— 同时顺带打包 `functions/` 口令门。项目名不同时改脚本顶部的 `PROJECT_NAME`。
+
+换口令：改 `site-password.local` → 重跑上面的 `secret put` → 重新部署。会话是由口令派生的无状态 HMAC Cookie，换口令即全员立刻失效。
 
 ## 🙏 致谢
 

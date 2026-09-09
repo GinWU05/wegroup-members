@@ -115,6 +115,7 @@ See [`group.example.json`](./group.example.json):
 | `pnpm web:dev` | Astro dev server |
 | `pnpm web:build` | Static build → `web/dist/` |
 | `pnpm web:preview` | Preview the built site |
+| `pnpm web:deploy` | Build + privacy checks + upload to Cloudflare Pages (see [Deployment](#%EF%B8%8F-deployment)) |
 | `pnpm typecheck` | `tsc --noEmit` (scripts) + `astro check` (web) |
 | `pnpm lint` / `pnpm lint:fix` | Biome lint (+ fix) |
 | `pnpm format` | Biome format |
@@ -139,14 +140,31 @@ The guiding principle: **the code is harmless, the data is not** — so they are
 
 ## ☁️ Deployment
 
-Because the data is not in git, connect-to-git auto builds won't work. Build locally and upload the artifact directly:
+Because the data is not in git, connect-to-git auto builds won't work. Build locally and upload the artifact directly.
+
+**Hard rule: the deployment must be protected by Cloudflare Access or a password.** This repo ships a password gate as a Pages Functions middleware ([`functions/_middleware.ts`](./functions/_middleware.ts)): it intercepts every path (avatars included), serves a WeChat-WebView-friendly login form, and fails closed (503) if no password is configured. A shared password was chosen over CF Access because group members don't share an email domain for an Access policy.
+
+One-time setup:
 
 ```bash
-pnpm collect && pnpm web:build
-wrangler pages deploy web/dist
+# 1. Create the Pages project
+pnpm exec wrangler pages project create <project-name> --production-branch main
+
+# 2. Store the site password (keep the plaintext in site-password.local — gitignored —
+#    it is your only record; the secret cannot be read back from Cloudflare)
+pnpm exec wrangler pages secret put SITE_PASSWORD --project-name <project-name> < site-password.local
 ```
 
-**Hard rule: the deployment must be protected by Cloudflare Access or a password.**
+Then deploy (and redeploy after every `pnpm collect`):
+
+```bash
+pnpm collect
+pnpm web:deploy
+```
+
+`pnpm web:deploy` (`scripts/deploy.ts`) refuses to upload a `private`-mode build, rebuilds the site, re-verifies the artifact (no `.json` files, no stripped-field traces in the HTML), and only then runs `wrangler pages deploy` — which also bundles the `functions/` password gate. Set `PROJECT_NAME` at the top of the script if you named your project differently.
+
+To rotate the password: edit `site-password.local`, re-run the `secret put` command above, then redeploy. Sessions are stateless HMAC cookies derived from the password, so rotating it instantly invalidates everyone.
 
 ## 🙏 Acknowledgements
 
