@@ -4,7 +4,7 @@
  *
  * 数据源：
  *   1. Chatlog HTTP API（chatroom 成员列表、chatlog 消息记录）
- *   2. Chatlog 已解密的 contact.db（只读）：alias / nick_name / remark / small_head_url
+ *   2. Chatlog 已解密的 contact.db（只读）：alias / nick_name / remark / big_head_url
  *
  * 用法：
  *   pnpm collect         [-- --config group.local.json --year 2026 --out web/public/data]
@@ -63,6 +63,7 @@ interface ContactRow {
   nick_name: string | null;
   remark: string | null;
   small_head_url: string | null;
+  big_head_url: string | null;
 }
 
 /** members.json 单条成员（完整 schema，见 AGENTS.md） */
@@ -265,7 +266,7 @@ const dbMemberIds = new Set(dbMemberRows.map((r) => r.username));
 log(`contact.db chatroom_member 记录: ${dbMemberIds.size} 人`);
 
 const contactStmt = db.prepare(
-  "SELECT username, alias, nick_name, remark, small_head_url FROM contact WHERE username = ?",
+  "SELECT username, alias, nick_name, remark, small_head_url, big_head_url FROM contact WHERE username = ?",
 );
 
 // 口径：只输出当前成员；已退群者的发言不计入榜单
@@ -295,7 +296,8 @@ for (const wxid of currentMembers.keys()) {
     continue;
   }
   contacts.set(wxid, c);
-  const url = c.small_head_url ?? "";
+  // 优先原图（big /0，实测中位 940px），回退缩略图（small /132）；本地缩放后只部署缩放版
+  const url = c.big_head_url || c.small_head_url || "";
   if (!AVATAR_URL_RE.test(url)) noAvatarUrl++;
   else if (!dbMemberIds.has(wxid))
     notInDbRoom++; // 头像纪律：未经 chatroom_member 确认的不下载
