@@ -25,7 +25,7 @@
 ```
 wegroup-members/
 ├── AGENTS.md              # 本文件
-├── package.json           # pnpm；scripts: collect / collect:private / web:* / typecheck / lint / lint:fix / format
+├── package.json           # pnpm；scripts: collect(=collect:public) / collect:private / web:* / typecheck / lint / lint:fix / format
 ├── tsconfig.json          # scripts/ 的 tsc 配置：strict，noEmit，erasableSyntaxOnly（Node 原生跑 .ts）
 ├── biome.json             # Biome 统一 lint + format
 ├── scripts/               # 数据采集层（本地运行）
@@ -53,7 +53,7 @@ wegroup-members/
 - **TypeScript 锁 6.x**：`astro check` 依赖 TS 的程序化 API，TS 7（原生编译器）尚未提供，升级前先确认 withastro/roadmap#1321
 - **Biome 与 .astro**：Biome 只能看到 frontmatter，看不到模板里的引用，所以对 `*.astro` 关掉 `noUnusedImports` / `noUnusedVariables`（误报）；模板 HTML 部分不自动格式化，手动保持整洁
 - **提交前自查**：`pnpm lint:fix && pnpm typecheck`；仓库不内置 git hook，隐私防线靠 `.gitignore` 与本机本地措施
-- **常用命令**：`pnpm collect`（采集 + 头像，可追加 `-- --year 2025`）/ `pnpm collect:private`（隐私模式，产物可直接分享给群成员）/ `pnpm web:dev` / `pnpm web:build`（→ `web/dist/`）/ `pnpm web:preview` / `pnpm lint:fix` / `pnpm typecheck`
+- **常用命令**：`pnpm collect`（= `collect:public`，采集 + 头像，可追加 `-- --year 2025`）/ `pnpm collect:private`（全量含 remark，仅本机自用）/ `pnpm web:dev` / `pnpm web:build`（→ `web/dist/`）/ `pnpm web:preview` / `pnpm lint:fix` / `pnpm typecheck`
 
 ### 采集层（scripts/）
 
@@ -69,7 +69,7 @@ wegroup-members/
    - **缩放**：按 EXIF 方向摆正 → 居中裁方 → 256×256 WebP q82，不保留任何元数据（隐私加分）。实测 445 张共 4.3 MB，中位 7.5 KB；只部署缩放版，原图不落盘
    - **缓存**：`data/avatar-cache.json` 记 wxid → {url, spec, file}，URL 与规格未变且文件在则不重下；改 `OUTPUT_SIZE`/质量需 bump `SPEC` 让缓存整体失效。全量 445 张首次 ~16 s，命中缓存 ~0 s
    - **清理**：每次采集后删除目录内不属于本次成员的旧头像与残留 `.tmp`，保证磁盘文件 == members.json 引用
-   - **降级**：任一步失败 → `avatar: null`，日忘打印原因，展示层首字母占位；`--no-avatars` 可跳过下载只跑统计
+   - **降级**：任一步失败 → `avatar: null`，日志打印原因，展示层首字母占位；`--no-avatars` 可跳过下载只跑统计
 5. 产出统一 schema 的 `members.json`：
 
 ```jsonc
@@ -81,7 +81,8 @@ wegroup-members/
     "dataCutoff": "...",      // 数据截止时间
     "memberCount": 447,       // 成员数
     "countingRule": "...",    // 统计口径
-    "omittedFields": []       // 隐私模式下被删除的字段名；全量模式为 []
+    "mode": "public",         // public | private；展示层在 private 时挂红色警示横幅
+    "omittedFields": ["remark"] // 本文件删掉的字段；private 为 []
   },
   "members": [                // 按 msgCount 降序
     {
@@ -89,7 +90,7 @@ wegroup-members/
       "alias": "...",         // 微信号
       "nickName": "...",      // 微信昵称
       "displayName": "...",   // 群昵称
-      "remark": "...",        // 采集者备注；隐私模式下删除
+      "remark": "...",        // 采集者备注；仅 private 模式存在
       "avatar": "...",        // 站点根相对路径 avatars/<wxid>.webp（256×256），可 null
       "msgCount": 123         // 发言数
     }
@@ -102,14 +103,17 @@ wegroup-members/
 - **展示名**：`displayName` → `nickName`（不使用 `remark`，它是采集者视角不是本人视角；可作副标题或搜索字段）
 - **头像**：`avatar` → 展示名首字符占位
 - **微信号**：`alias` → 为空时不展示该行（不用 wxid 顶替，避免把系统分配的 wxid_xxx 当微信号误导读者）
-- 空值统一用 `""`（字符串字段）或 `null`（仅 `avatar`），不省略字段、不用 `undefined`。唯一例外：隐私模式下 `config.omittedFields` 列出的字段整个不存在，展示层按可选字段处理（不要硬编码字段名，读 `omittedFields`）
+- 空值统一用 `""`（字符串字段）或 `null`（仅 `avatar`），不省略字段、不用 `undefined`。唯一例外：`config.omittedFields` 列出的字段整个不存在（public 模式下的 `remark`），展示层按可选字段处理：在 `index.astro` 顶部读 `omittedFields` **判一次**得出 `showRemark`，往下传 prop，不在各处重复判
 
 ### Web 层（web/）
 
 - **Astro 7 静态输出，零 island**：`members.json` 在 frontmatter 里 `import`，447 张卡片构建期渲染成 HTML；浏览器端只有一段原生 `<script>` 做过滤/重排（卡片挂 `data-search` / `data-count` / `data-name` / `data-rank`，过滤切 `hidden`，排序用 `append` 移动既有节点）。不加 React/Preact 等 island，否则丢掉零 JS 优势
 - 布局：顶部群概览（群名、成员数、今年发过言人数、发言总数、数据截止/采集时间、可展开的统计口径）+ 工具栏（搜索 / 排序：发言最多·最少·名称 / 只看发过言的）+ 成员卡片墙（auto-fill 网格，最小列宽 `min(300px, 100%)`，375px 标准手机宽已验证不溢出）
-- 展示回退约定的实现集中在 `web/src/lib/members.ts`（`displayNameOf` / `initialOf` 用 `Intl.Segmenter` 按 grapheme 取首字，emoji 不会被劣成两半 / `hueOf` 按 wxid 哈希占位底色 / `searchTextOf`）；`remark` 是否渲染由 `config.omittedFields` 决定，隐私版构建产物中“备注”字样与 `remark` 字符串 0 次出现（已验证）
-- 群名、年份、口径等全部来自 `config` → 换群不改代码；`<meta name="robots" content="noindex, nofollow">`，页脚附“如需移除自己的信息联系群主”
+- 展示回退约定的实现集中在 `web/src/lib/members.ts`（`displayNameOf` / `initialOf` 用 `Intl.Segmenter` 按 grapheme 取首字，emoji 不会被劣成两半 / `hueOf` 按 wxid 哈希占位底色 / `searchTextOf`）；`remark` 是否渲染由 `config.omittedFields` 决定，public 构建产物中“备注”字样与 `remark` 字符串 0 次出现（已验证）
+- **members.json 不会被部署**：它在 `web/src/data/`，frontmatter `import` 是构建期读取，渲染完即丢；`web/dist/` 里没有任何 `.json`（每次改动后用 `find web/dist -name '*.json'` 复核）。只有 `web/public/` 下的文件会原样进产物，所以**不要把数据放进 public/**。但页面上渲染出的字段在 HTML 里就是明文，隐私防线是“不该展示的字段根本不进 members.json”（public 模式），而不是展示层隐藏
+- **private 警示横幅**：`config.mode === "private"` 时页顶 sticky 红色横幅“仅供本机预览，禁止部署”，防止误把 private 产物上线
+- 群名、年份、口径等全部来自 `config` → 换群不改代码；`<meta name="robots" content="noindex, nofollow">`
+- 页脚“关于这份数据”四条：来源（收集者自己设备的聊天记录，可能缺漏，不绝对准确仅供参考）/ 范围（年初至截止时间、只含当前成员、排序规则）/ 展示内容（均为群内对他人可见的资料，不含聊天内容；private 时追加“备注为收集者个人标注”）/ 移除方式
 - 产物体量：`index.html` 约 330 KB（447 张卡内联）+ CSS 一份 + 头像 4.3 MB；构建 ~1 s
 
 ### 部署
@@ -124,11 +128,13 @@ wegroup-members/
 核心原则：**代码无害，数据有害** —— 代码与数据彻底分离后可安全开源。
 
 - 仓库只含采集脚本 + Web 模板；`data/`、`avatars/`、`*.local.json`（群特定配置）全部 gitignore
-- **公开字段决策（2026-09-06，本人拍板）**：`alias`、`wxid`、`remark` 均允许进入公开产物；头像文件名直接用 wxid（无需 hash）
+- **公开字段决策**：`alias`、`wxid` 允许进入公开产物；头像文件名直接用 wxid（无需 hash）；`remark` 是采集者私有视角，**不进公开产物**（2026-09-09 改，推翻 09-06 “remark 可公开”的决定）
 - 注意：CF Pages 部署即数据可见（受访问控制约束，见部署节）。上线前仍需征得群成员/群主同意
-- **隐私模式**：`pnpm collect:private`（`--private`）。目的是保护群成员隐私，使 `members.json` 可直接分享给群成员；默认 `pnpm collect` 仍全量输出
-  - **删除字段清单只有一个事实来源**：`scripts/collect.ts` 的 `PRIVATE_STRIPPED_FIELDS`（当前：`remark`）。类型为 `(keyof Member)[]`，写错字段名或字段已从 schema 删除时 `typecheck` 直接报错；剥离逻辑、日忘、`config.omittedFields` 全部由它派生。日后要收紧更多字段（如 `alias`）只改这一行
-  - 产物自描述：`config.omittedFields` 写明删了哪些字段，全量模式为 `[]`，展示层不硬编码
+- **两种输出模式，默认 public**（2026-09-09，原来是反的：默认全量、`:private` 才剥离；现已对调，“不加参数就是安全的”）
+  - `pnpm collect` = `pnpm collect:public`：删除 `PUBLIC_STRIPPED_FIELDS`，产物可部署 / 分享给群成员
+  - `pnpm collect:private`（`--private`）：全量输出，仅采集者本机自用，勿部署；站点会挂红色警示横幅
+  - **删除字段清单只有一个事实来源**：`scripts/collect.ts` 的 `PUBLIC_STRIPPED_FIELDS`（当前：`remark`）。类型为 `(keyof Member)[]`，写错字段名或字段已从 schema 删除时 `typecheck` 直接报错；剥离逻辑、日志、`config.omittedFields` 全部由它派生。日后要收紧更多字段（如 `alias`）只改这一行
+  - 产物自描述：`config.mode` 写明模式，`config.omittedFields` 写明删了哪些字段（private 为 `[]`），展示层不硬编码
 
 ### 2. 通用性 / monorepo
 
@@ -165,6 +171,6 @@ wegroup-members/
 - [x] M1 采集脚本：群成员（chatroom API）+ 联系人信息（contact.db 只读）+ 年度发言计数（按月分片）→ `members.json`
 - [x] M2 头像本地化：下载原图 / 校验 / 缩放 256 WebP / 缓存 / 清理 / 降级（`scripts/lib/avatars.ts`，实测 445/445）
 - [x] M3 Web 站点：Astro 静态卡片墙 + 搜索 / 排序 / 只看发过言的（`web/`，零 island）
-- [x] M4 隐私模式：`collect:private`，删除字段清单集中在 `PRIVATE_STRIPPED_FIELDS`（默认仍全量）
+- [x] M4 输出模式：默认 public（删 `PUBLIC_STRIPPED_FIELDS`），`collect:private` 全量仅本机；站点对 private 产物挂警示
 - [ ] M5 CF Pages 部署（**必须 CF Access 或口令**）
 - [ ] M6（可选）域名购买与绑定
