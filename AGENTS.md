@@ -37,7 +37,9 @@ wegroup-members/
 │   ├── src/
 │   │   ├── pages/index.astro       # 唯一页面：概览 + 卡片墙 + 搜索/排序 <script>
 │   │   ├── components/MemberCard.astro
+│   │   ├── components/MsgHistogram.astro  # 发言数分布柱状图（纯 HTML/CSS）
 │   │   ├── lib/members.ts          # schema 类型 + 展示回退约定的实现
+│   │   ├── lib/histogram.ts        # 对数分桶算法（柱数 10~30 自适应）
 │   │   ├── styles/global.css
 │   │   └── data/members.json       # 构建期输入（gitignore）
 │   └── public/            # 原样进产物；favicon.svg/png 入库，avatars/ gitignore。Biome 不检查此目录
@@ -109,8 +111,9 @@ wegroup-members/
 ### Web 层（web/）
 
 - **Astro 7 静态输出，零 island**：`members.json` 在 frontmatter 里 `import`，447 张卡片构建期渲染成 HTML；浏览器端只有一段原生 `<script>` 做过滤/重排（卡片挂 `data-search` / `data-count` / `data-name` / `data-rank`，过滤切 `hidden`，排序用 `append` 移动既有节点）。不加 React/Preact 等 island，否则丢掉零 JS 优势
-- 布局：顶部群概览（简称标题、成员数、今年发过言人数、活跃成员数、发言总数、数据截止/采集时间、可展开的统计口径；窄屏指标 2×2）+ 工具栏（搜索 / 排序：发言最多·最少·名称 / 范围：全部成员·活跃成员·有发言的）+ 成员卡片墙（auto-fill 网格，最小列宽 `min(300px, 100%)`，375px 标准手机宽已验证不溢出）
+- 布局：顶部群概览（简称标题、成员数、今年发过言人数、活跃成员数、发言总数、数据截止/采集时间、可展开的统计口径；窄屏指标 2×2）+ 发言数分布柱状图 + 工具栏（搜索 / 排序：发言最多·最少·名称 / 范围：全部成员·活跃成员·有发言的）+ 成员卡片墙（auto-fill 网格，最小列宽 `min(300px, 100%)`，375px 标准手机宽已验证不溢出）
 - **活跃成员**：发言数排进发过言成员的前 25%（P75 分位向上取整；`activeThresholdOf`，百分比常量 `ACTIVE_TOP_PERCENT`）。0 条者不参与计算——半数以上成员 0 条，算进去门槛会被压到 0。门槛构建期算好，卡片挂 `data-active` + `.active`（头像强调色描边、发言数强调色），概览与统计口径里写明当次门槛，浏览器端不重算
+- **发言数分布柱状图**（`MsgHistogram.astro` + `lib/histogram.ts`）：X = 发言条数（对数刻度），Y = 人数；每根柱按活跃/其他两色堆叠，一眼看出门槛落在哪里。分界点只用 1-2-5 类“顺眼”数（`MANTISSA_SETS` 由疏到密四组），选最疏一组使柱数落在 `MIN_BARS`~`MAX_BARS`（10~30），换群不调参；实测最大 3 万条 → 14 根。0 条者放不进对数轴，图下注释写人数。纯 HTML/CSS（flex 高度百分比）不用 SVG，因为 SVG viewBox 缩放会把手机端文字缩到看不见；窄屏且 ≥ 12 根时隐去柱顶数值、x 轴标签隔一显一（title/sr-only 仍全）
 - **名次**：只给发过言的成员标 `#n`，零发言成员不计名次（发言数灰显），但 `data-rank` 仍全员连续供排序用
 - 展示回退约定的实现集中在 `web/src/lib/members.ts`（`displayNameOf` 剔控制字符后回退，全空显“（无昵称）”不用 wxid 顶替；实测有昵称是 4 个 U+007F / `initialOf` 用 `Intl.Segmenter` 按 grapheme 取首字，emoji 不会被劣成两半 / `hueOf` 按 wxid 哈希占位底色 / `searchTextOf` / `quantileOf` / `activeThresholdOf`）；`remark` 是否渲染由 `config.omittedFields` 决定，public 构建产物中“备注”字样与 `remark` 字符串 0 次出现（已验证）
 - **members.json 不会被部署**：它在 `web/src/data/`，frontmatter `import` 是构建期读取，渲染完即丢；`web/dist/` 里没有任何 `.json`（每次改动后用 `find web/dist -name '*.json'` 复核）。只有 `web/public/` 下的文件会原样进产物，所以**不要把数据放进 public/**。但页面上渲染出的字段在 HTML 里就是明文，隐私防线是“不该展示的字段根本不进 members.json”（public 模式），而不是展示层隐藏
