@@ -7,8 +7,10 @@ import "../styles/global.css";
 const data = raw as MembersData;
 const { config, members } = data;
 
-// 隐私模式产物：omittedFields 列出的字段不存在。展示层据此决定是否渲染，不硬编码字段名
+// remark 是否存在只在这里判一次：public 产物（默认）已删除该字段，omittedFields 会列出它
 const showRemark = !config.omittedFields.includes("remark");
+// private 产物含采集者私有字段，只应本机预览；页面顶部挂醒目警示防误部署
+const isPrivateBuild = config.mode === "private";
 
 const sorted = [...members].sort((a, b) => b.msgCount - a.msgCount || a.wxid.localeCompare(b.wxid));
 const activeCount = members.filter((m) => m.msgCount > 0).length;
@@ -25,6 +27,13 @@ const title = `${config.groupName} · ${config.year} 年成员发言榜`;
     <title>{title}</title>
   </head>
   <body>
+    {
+      isPrivateBuild && (
+        <div class="private-banner" role="alert">
+          ⚠ private 构建：含采集者私有字段，仅供本机预览，禁止部署或分享。部署前请用 pnpm collect 重新采集。
+        </div>
+      )
+    }
     <header class="hero">
       <div class="wrap">
         <p class="eyebrow">{config.year} 年度</p>
@@ -79,9 +88,22 @@ const title = `${config.groupName} · ${config.year} 年成员发言榜`;
     </main>
 
     <footer class="wrap foot">
-      <p>
-        排名按 {config.year} 年发言条数，同分按 wxid 排序。头像与名称来自微信公开资料；如需移除自己的信息请联系群主。
-      </p>
+      <h2>关于这份数据</h2>
+      <ul>
+        <li>
+          <strong>来源：</strong>数据来自收集者自己设备上的微信聊天记录，只覆盖该设备实际同步到的消息。收集者离线、换机、消息未同步等都会造成缺漏，统计结果<strong>不绝对准确，仅供参考</strong>。
+        </li>
+        <li>
+          <strong>范围：</strong>{config.year} 年 1 月 1 日起至数据截止时间（见页首）。只列出采集时仍在群内的成员，已退群者的发言不计入；排名按发言条数，同分按内部 id 排序。
+        </li>
+        <li>
+          <strong>展示内容：</strong>头像、群昵称、微信昵称与微信号均为成员在群内对其他成员可见的资料；不包含聊天内容。
+          {showRemark && "“备注”为收集者个人标注，不代表本人。"}
+        </li>
+        <li>
+          <strong>移除：</strong>如不希望自己出现在这里，联系收集者或群主即可移除。
+        </li>
+      </ul>
     </footer>
 
     <script>
@@ -268,5 +290,36 @@ const title = `${config.groupName} · ${config.year} 年成员发言榜`;
     padding: 2rem 1rem 3rem;
     font-size: 0.8rem;
     color: var(--muted);
+    border-top: 1px solid var(--border);
+    margin-top: 2rem;
+  }
+  .foot h2 {
+    font-size: 0.85rem;
+    margin: 0 0 0.5rem;
+    color: var(--text);
+  }
+  .foot ul {
+    margin: 0;
+    padding-left: 1.1rem;
+    max-width: 80ch;
+  }
+  .foot li + li {
+    margin-top: 0.35rem;
+  }
+  .foot strong {
+    color: var(--text);
+    font-weight: 600;
+  }
+
+  .private-banner {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    padding: 0.6rem 1rem;
+    text-align: center;
+    font-size: 0.85rem;
+    font-weight: 600;
+    background: #b91c1c;
+    color: #fff;
   }
 </style>
