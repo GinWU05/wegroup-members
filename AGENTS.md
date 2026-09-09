@@ -75,8 +75,8 @@ wegroup-members/
 ```jsonc
 {
   "config": {
-    "groupName": "...",       // 群名（页首 h1）
-    "groupShortName": "...",  // 群简称（<title> = “<简称>·成员信息”）；group.local.json 未配置时等于 groupName
+    "groupName": "...",       // 群全名（目前页面未展示，保留作标识）
+    "groupShortName": "...",  // 群简称；<title> 与 h1 均为“<简称>·成员信息”；group.local.json 未配置时等于 groupName
     "year": 2026,             // 统计年份
     "collectedAt": "...",     // 采集时间
     "dataCutoff": "...",      // 数据截止时间
