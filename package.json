@@ -11,15 +11,21 @@
   "scripts": {
     "collect": "node --disable-warning=ExperimentalWarning scripts/collect.ts",
     "collect:private": "node --disable-warning=ExperimentalWarning scripts/collect.ts --private",
-    "typecheck": "tsc --noEmit",
+    "web:dev": "astro dev --root web",
+    "web:build": "astro build --root web",
+    "web:preview": "astro preview --root web",
+    "web:check": "astro check --root web",
+    "typecheck": "tsc --noEmit && astro check --root web",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write ."
   },
   "devDependencies": {
+    "@astrojs/check": "^0.9.10",
     "@biomejs/biome": "^2.5.12",
     "@types/node": "^22.20.1",
-    "typescript": "^7.0.2"
+    "astro": "^7.3.2",
+    "typescript": "^6.0.3"
   },
   "dependencies": {
     "sharp": "^0.35.4"
