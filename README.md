@@ -1,12 +1,29 @@
+<div align="center">
+
 # wegroup-members
+
+**WeChat group member wall — yearly message stats, rendered as a zero-JS static site.**
+
+[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A5%2022.18-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![pnpm](https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Astro](https://img.shields.io/badge/Astro-7-BC52EE?logo=astro&logoColor=white)](https://astro.build/)
+[![Biome](https://img.shields.io/badge/Biome-lint%20%2B%20format-60A5FA?logo=biome&logoColor=white)](https://biomejs.dev/)
+[![Cloudflare Pages](https://img.shields.io/badge/Cloudflare-Pages-F38020?logo=cloudflare&logoColor=white)](https://pages.cloudflare.com/)
+[![Client JS](https://img.shields.io/badge/client%20JS-zero%20islands-brightgreen)](#%EF%B8%8F-how-it-works)
+[![Privacy](https://img.shields.io/badge/privacy-by%20default-blueviolet)](#-privacy-design)
 
 English | [简体中文](./README.zh-CN.md)
 
+</div>
+
+---
+
 Collect member info (nickname, avatar) and yearly message counts for a WeChat group from a locally running [Chatlog](https://github.com/imldy/chatlog) instance, and generate a static member-wall website ready to deploy on Cloudflare Pages.
 
-The codebase is group-agnostic: point it at any group via a local config file. **No group-specific data ever enters this repository** — see [Privacy design](#privacy-design).
+The codebase is group-agnostic: point it at any group via a local config file. **No group-specific data ever enters this repository** — see [Privacy design](#-privacy-design).
 
-## Features
+## ✨ Features
 
 - **Member wall**: card grid with avatar, display name, message count and rank, built as a zero-island Astro static site (no framework JS shipped to the browser; only one small vanilla `<script>` for filtering/sorting)
 - **Yearly message ranking**: counts messages from Jan 1 to the collection date, deduplicated by `seq`, with a clearly stated counting rule shown on the site
@@ -16,7 +33,7 @@ The codebase is group-agnostic: point it at any group via a local config file. *
 - **Avatar localization**: originals are downloaded with strict validation (HTTPS `wx.qlogo.cn` host allowlist, size cap, magic-number check, decompression-bomb guard), then re-encoded to 256×256 WebP with all metadata stripped; filenames are salted hashes, never wxids
 - **Two output modes** — see below. The default is the safe one.
 
-## Output modes
+## 🔀 Output modes
 
 | Mode | Command | Contents | Deployable |
 |---|---|---|---|
@@ -25,7 +42,7 @@ The codebase is group-agnostic: point it at any group via a local config file. *
 
 The strip list has a single source of truth: `PUBLIC_STRIPPED_FIELDS` in `scripts/collect.ts`, typed as `(keyof Member)[]` so a typo fails `typecheck`. The output is self-describing: `config.mode` and `config.omittedFields` tell the web layer what was removed, so nothing is hardcoded downstream.
 
-## How it works
+## ⚙️ How it works
 
 ```
 Chatlog HTTP API          contact.db (read-only)
@@ -40,13 +57,13 @@ Chatlog HTTP API          contact.db (read-only)
 
 `members.json` is imported in Astro frontmatter — it is consumed at build time and never shipped; `web/dist/` contains no `.json` at all.
 
-## Prerequisites
+## 📋 Prerequisites
 
 - Node.js ≥ 22.18 (runs `.ts` natively via type stripping — no tsx/ts-node/build step)
 - pnpm
 - [Chatlog](https://github.com/imldy/chatlog) running locally (default `http://127.0.0.1:5030`) with its decrypted `contact.db` available on disk
 
-## Quick start
+## 🚀 Quick start
 
 ```bash
 pnpm install
@@ -89,7 +106,7 @@ See [`group.example.json`](./group.example.json):
 | `--no-avatars` | off | Skip avatar download (stats only; `avatar` all `null`) |
 | `--private` | off | Private mode (see above) |
 
-## Commands
+## 🧰 Commands
 
 | Command | What it does |
 |---|---|
@@ -102,14 +119,14 @@ See [`group.example.json`](./group.example.json):
 | `pnpm lint` / `pnpm lint:fix` | Biome lint (+ fix) |
 | `pnpm format` | Biome format |
 
-## Counting rules
+## 📏 Counting rules
 
 - System messages (`type=10000`) and records with missing/invalid senders are excluded (Chatlog occasionally stuffs XML into the `sender` field for quoted messages; senders are validated against a wxid pattern)
 - Everything else counts as a message: text, images, videos, **stickers**, links/quotes/files
 - Only members present at collection time are included; messages from people who have since left the group are not counted
 - The exact rule and the data-cutoff timestamp are embedded in `config.countingRule` and displayed on the site
 
-## Privacy design
+## 🔒 Privacy design
 
 The guiding principle: **the code is harmless, the data is not** — so they are strictly separated.
 
@@ -120,7 +137,7 @@ The guiding principle: **the code is harmless, the data is not** — so they are
 - **Data never leaves the machine implicitly**: Chatlog is queried only for the target group and time range; `contact.db` is opened read-only
 - **Deployment is gated**: deploys must sit behind Cloudflare Access or a password; going public requires consent from the group / group owner. The page also carries `noindex, nofollow`
 
-## Deployment
+## ☁️ Deployment
 
 Because the data is not in git, connect-to-git auto builds won't work. Build locally and upload the artifact directly:
 
@@ -131,7 +148,7 @@ wrangler pages deploy web/dist
 
 **Hard rule: the deployment must be protected by Cloudflare Access or a password.**
 
-## Acknowledgements
+## 🙏 Acknowledgements
 
 - [Chatlog](https://github.com/imldy/chatlog) — local WeChat chat-history service this project reads from
 - [Astro](https://astro.build/) — static site framework

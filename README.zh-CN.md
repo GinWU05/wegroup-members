@@ -1,12 +1,29 @@
+<div align="center">
+
 # wegroup-members
+
+**微信群成员墙 —— 年度发言统计，零 JS 静态站呈现。**
+
+[![Node.js](https://img.shields.io/badge/Node.js-%E2%89%A5%2022.18-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
+[![pnpm](https://img.shields.io/badge/pnpm-10-F69220?logo=pnpm&logoColor=white)](https://pnpm.io/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-6.x-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Astro](https://img.shields.io/badge/Astro-7-BC52EE?logo=astro&logoColor=white)](https://astro.build/)
+[![Biome](https://img.shields.io/badge/Biome-lint%20%2B%20format-60A5FA?logo=biome&logoColor=white)](https://biomejs.dev/)
+[![Cloudflare Pages](https://img.shields.io/badge/Cloudflare-Pages-F38020?logo=cloudflare&logoColor=white)](https://pages.cloudflare.com/)
+[![Client JS](https://img.shields.io/badge/%E5%AE%A2%E6%88%B7%E7%AB%AF%20JS-%E9%9B%B6%20island-brightgreen)](#%EF%B8%8F-工作原理)
+[![Privacy](https://img.shields.io/badge/%E9%9A%90%E7%A7%81-%E9%BB%98%E8%AE%A4%E5%AE%89%E5%85%A8-blueviolet)](#-隐私设计)
 
 [English](./README.md) | 简体中文
 
+</div>
+
+---
+
 从本地运行的 [Chatlog](https://github.com/imldy/chatlog) 服务提取指定微信群的成员信息（昵称、头像）与年度发言次数，生成静态成员墙站点，可部署到 Cloudflare Pages。
 
-代码与群无关：通过本地配置文件指向任意群即可。**任何群特定数据都不会进入本仓库** —— 见[隐私设计](#隐私设计)。
+代码与群无关：通过本地配置文件指向任意群即可。**任何群特定数据都不会进入本仓库** —— 见[隐私设计](#-隐私设计)。
 
-## 特性
+## ✨ 特性
 
 - **成员卡片墙**：头像、展示名、发言数与名次，Astro 零 island 静态输出（浏览器不加载任何框架 JS，只有一段原生 `<script>` 做过滤/重排）
 - **年度发言排行**：统计当年 1 月 1 日至采集日的消息，按 `seq` 去重，统计口径在站点上明示
@@ -16,7 +33,7 @@
 - **头像本地化**：严格校验后下载原图（HTTPS `wx.qlogo.cn` host 白名单、大小上限、魔数校验、解压炸弹防护），重编码为 256×256 WebP 并抹掉全部元数据；文件名为盐化哈希，不暴露 wxid
 - **两种输出模式** —— 见下节。默认即安全模式。
 
-## 输出模式
+## 🔀 输出模式
 
 | 模式 | 命令 | 内容 | 可否部署 |
 |---|---|---|---|
@@ -25,7 +42,7 @@
 
 删除字段清单只有一个事实来源：`scripts/collect.ts` 的 `PUBLIC_STRIPPED_FIELDS`，类型为 `(keyof Member)[]`，写错字段名 `typecheck` 直接报错。产物自描述：`config.mode` 与 `config.omittedFields` 告诉展示层删了什么，下游不做任何硬编码。
 
-## 工作原理
+## ⚙️ 工作原理
 
 ```
 Chatlog HTTP API          contact.db（只读）
@@ -40,13 +57,13 @@ Chatlog HTTP API          contact.db（只读）
 
 `members.json` 在 Astro frontmatter 里 `import`，构建期读取、渲染完即丢；`web/dist/` 里没有任何 `.json`。
 
-## 前置要求
+## 📋 前置要求
 
 - Node.js ≥ 22.18（原生 type stripping 直接跑 `.ts`，不需要 tsx/ts-node/构建步骤）
 - pnpm
 - 本地运行的 [Chatlog](https://github.com/imldy/chatlog)（默认 `http://127.0.0.1:5030`），且其已解密的 `contact.db` 在磁盘上可读
 
-## 快速开始
+## 🚀 快速开始
 
 ```bash
 pnpm install
@@ -89,7 +106,7 @@ pnpm web:preview
 | `--no-avatars` | 关 | 跳过头像下载（只跑统计；`avatar` 全为 `null`） |
 | `--private` | 关 | private 模式（见上节） |
 
-## 常用命令
+## 🧰 常用命令
 
 | 命令 | 作用 |
 |---|---|
@@ -102,14 +119,14 @@ pnpm web:preview
 | `pnpm lint` / `pnpm lint:fix` | Biome lint（+ 自动修复） |
 | `pnpm format` | Biome 格式化 |
 
-## 统计口径
+## 📏 统计口径
 
 - 排除系统消息（`type=10000`）与无 sender / sender 非法的记录（Chatlog 对部分引用消息会把 XML 塞进 `sender` 字段，因此 sender 按 wxid 格式校验）
 - 其余类型全部计为发言：文本、图片、视频、**表情包**、链接/引用/文件
 - 只统计采集时点的当前群成员；已退群者的发言不计入
 - 精确口径与数据截止时间写入 `config.countingRule`，并在站点上明示
 
-## 隐私设计
+## 🔒 隐私设计
 
 核心原则：**代码无害，数据有害** —— 所以二者彻底分离。
 
@@ -120,7 +137,7 @@ pnpm web:preview
 - **数据不会隐式离开本机**：只查询目标群与所需时间范围；`contact.db` 只读打开
 - **部署有门禁**：部署必须带 Cloudflare Access 或口令；转为公开访问前需征得群成员/群主同意。页面带 `noindex, nofollow`
 
-## 部署
+## ☁️ 部署
 
 数据不在 git 里，CF Pages 的"连 git 自动构建"走不通；本地构建后直接上传产物：
 
@@ -131,7 +148,7 @@ wrangler pages deploy web/dist
 
 **硬规则：部署必须带 Cloudflare Access 或口令保护。**
 
-## 致谢
+## 🙏 致谢
 
 - [Chatlog](https://github.com/imldy/chatlog) —— 本项目读取的本地微信聊天记录服务
 - [Astro](https://astro.build/) —— 静态站点框架
