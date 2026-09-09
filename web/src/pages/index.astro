@@ -14,12 +14,19 @@ import "../styles/global.css";
 const data = raw as MembersData;
 const { config, members } = data;
 
-// remark 是否存在只在这里判一次：public 产物（默认）已删除该字段，omittedFields 会列出它
+// 字段是否存在只在这里判一次：public 产物（默认）已删除 wxid/alias/remark，omittedFields 会列出它们
 const showRemark = !config.omittedFields.includes("remark");
+const showAlias = !config.omittedFields.includes("alias");
 // private 产物含采集者私有字段，只应本机预览；页面顶部挂醒目警示防误部署
 const isPrivateBuild = config.mode === "private";
 
-const sorted = [...members].sort((a, b) => b.msgCount - a.msgCount || a.wxid.localeCompare(b.wxid));
+const searchFields = ["群昵称", "微信昵称", showAlias && "微信号", showRemark && "备注"].filter(
+  Boolean,
+);
+const searchPlaceholder = `搜索${searchFields.join(" / ")}`;
+
+// 同分保持采集输出顺序（采集层已按 msgCount 降序 + wxid 打破平局）；public 产物无 wxid，不重新 tie-break
+const sorted = [...members].sort((a, b) => b.msgCount - a.msgCount);
 const spokeCount = members.filter((m) => m.msgCount > 0).length;
 const totalMsgs = members.reduce((s, m) => s + m.msgCount, 0);
 // 活跃 = 发言数排进发过言成员的前 25%；门槛与人数都从数据算出，不写死
@@ -91,7 +98,7 @@ const title = `${config.groupShortName}·成员信息`;
           <input
             id="q"
             type="search"
-            placeholder={showRemark ? "搜索群昵称 / 微信昵称 / 微信号 / 备注" : "搜索群昵称 / 微信昵称 / 微信号"}
+            placeholder={searchPlaceholder}
             autocomplete="off"
             spellcheck="false"
           />
@@ -140,7 +147,7 @@ const title = `${config.groupShortName}·成员信息`;
           <strong>范围：</strong>{config.year} 年 1 月 1 日起至数据截止时间（见页首）。只列出采集时仍在群内的成员，已退群者的发言不计入。发过言的成员按条数排名（同分按内部 id），未发言成员不计名次，列于末尾。
         </li>
         <li>
-          <strong>展示内容：</strong>头像、群昵称、微信昵称与微信号均为成员在群内对其他成员可见的资料；不包含聊天内容。
+          <strong>展示内容：</strong>头像、群昵称{showAlias ? "、微信昵称与微信号" : "与微信昵称"}均为成员在群内对其他成员可见的资料；不包含聊天内容。
           {showRemark && "“备注”为收集者个人标注，不代表本人。"}
         </li>
         <li>

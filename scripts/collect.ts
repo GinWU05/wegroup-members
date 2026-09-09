@@ -9,12 +9,12 @@
  * 用法：
  *   pnpm collect            —— 等于 collect:public
  *   pnpm collect:public     —— 默认模式：删除 PUBLIC_STRIPPED_FIELDS 列出的字段，产物可部署 / 分享给群成员
- *   pnpm collect:private    —— --private：全量输出（含 remark），仅采集者本机自用，勿部署
+ *   pnpm collect:private    —— --private：全量输出（含 wxid/alias/remark），仅采集者本机自用，勿部署
  *   可追加：-- --config group.local.json --year 2026 --out web/src/data --avatars-dir web/public/avatars --no-avatars
  *
  * 产出：
  *   <out>/members.json            —— 站点数据（含全部字段，公开口径见 AGENTS.md）
- *   <avatars-dir>/<wxid>.<ext>    —— 本地化头像（M2，见 lib/avatars.ts）
+ *   <avatars-dir>/<hash>.webp     —— 本地化头像（M2，见 lib/avatars.ts；文件名为盐化哈希，不暴露 wxid）
  *   data/avatar-cache.json        —— 头像下载缓存记录（不部署）
  *
  * 统计口径（详见 AGENTS.md「统计与成员口径」）：
@@ -90,10 +90,12 @@ interface Member {
 type OutputMode = "public" | "private";
 
 /**
- * public 模式下从每条成员记录中删除的字段（采集者私有视角的信息，不属于群成员自己）。
- * 新增需脱敏的字段只改这一行；元素必须是 Member 的字段名，写错 typecheck 报错。
+ * public 模式下从每条成员记录中删除的字段：
+ *   - wxid / alias 可定位到具体微信账号（2026-09-09 二次收紧）
+ *   - remark 是采集者私有视角的信息，不属于群成员自己
+ * 增减需脱敏的字段只改这一行；元素必须是 Member 的字段名，写错 typecheck 报错。
  */
-const PUBLIC_STRIPPED_FIELDS: (keyof Member)[] = ["remark"];
+const PUBLIC_STRIPPED_FIELDS: (keyof Member)[] = ["wxid", "alias", "remark"];
 
 /** 返回删掉清单字段后的副本；Partial = 每个字段都可能不存在 */
 function stripForPublic(m: Member): Partial<Member> {
@@ -172,7 +174,7 @@ const log = (...xs: unknown[]): void => console.error("[collect]", ...xs);
 if (args.mode === "public") {
   log(`public 模式：删除字段 ${PUBLIC_STRIPPED_FIELDS.join(", ")}，产物可部署 / 分享`);
 } else {
-  log("⚠ private 模式：全量输出（含 remark），仅本机自用，勿部署 / 分享");
+  log("⚠ private 模式：全量输出（含 wxid/alias/remark），仅本机自用，勿部署 / 分享");
 }
 
 // ---------- 配置 ----------

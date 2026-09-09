@@ -4,12 +4,14 @@
  * 纪律（继承 chatlog-story-daily skill）：
  *   - 只接受 https://wx.qlogo.cn/ 的 URL；重定向每一跳都重新校验 host
  *   - Content-Type 必须 image/*，字节数上限 MAX_BYTES，魔数必须是 JPEG/PNG/GIF/WEBP，再交给 sharp 解码
- *   - 输出统一为 <wxid>.webp，边长 OUTPUT_SIZE；重新编码顺带抹掉原图 EXIF 等元数据
- *   - 缓存按 (wxid, url, 规格) 命中则不重下；改 OUTPUT_SIZE/质量需同步 bump SPEC
+ *   - 输出统一为 <hash>.webp（sha256(盐:wxid) 前 16 位），边长 OUTPUT_SIZE；重新编码顺带抹掉原图 EXIF 等元数据。
+ *     public 产物已不含 wxid，文件名也不能暴露；盐只存本地缓存文件，不部署
+ *   - 缓存按 (wxid, url, 规格) 命中则不重下；改 OUTPUT_SIZE/质量需同步 bump SPEC；缓存丢失则盐重生成、全量重下
  *   - 任何一步失败 → 该成员无头像（avatar=null），展示层降级首字母
  *   - 目录内不属于本次成员的旧文件会被清理，保证磁盘文件 == members.json 引用
  */
 
+import { createHash, randomBytes } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -35,11 +37,15 @@ const WEBP_QUALITY = 82;
 const SPEC = `webp-${OUTPUT_SIZE}-q${WEBP_QUALITY}`;
 
 const OUTPUT_EXT = "webp";
-const WXID_RE = /^[A-Za-z0-9_\-@.]+$/;
+// 宽松匹配（含哈希名与历史上的 wxid 名），保证旧命名规则的遗留文件也会被收尾清理
 const AVATAR_FILE_RE = /^[A-Za-z0-9_\-@.]+\.(jpg|png|gif|webp)$/;
 
-/** 缓存文件内容：wxid -> 上次成功处理的 URL、规格与落盘文件名 */
-type AvatarCache = Record<string, { url: string; spec: string; file: string }>;
+/** 缓存文件内容：文件名哈希盐 + wxid -> 上次成功处理的 URL、规格与落盘文件名 */
+interface AvatarCache {
+  /** 文件名 = sha256(`${salt}:${wxid}`) 前 16 位。盐随缓存持久化，只存本地 */
+  salt: string;
+  entries: Record<string, { url: string; spec: string; file: string }>;
+}
 
 export interface AvatarSyncOptions {
   /** 头像落盘目录（站点 public/avatars） */
@@ -152,21 +158,23 @@ async function toThumbnail(src: Buffer): Promise<Buffer> {
 // ---------- 缓存 ----------
 
 function loadCache(path: string): AvatarCache {
-  if (!existsSync(path)) return {};
+  const fresh = (): AvatarCache => ({ salt: randomBytes(16).toString("hex"), entries: {} });
+  if (!existsSync(path)) return fresh();
   try {
-    const raw = JSON.parse(readFileSync(path, "utf8")) as unknown;
-    return raw && typeof raw === "object" ? (raw as AvatarCache) : {};
+    const raw = JSON.parse(readFileSync(path, "utf8")) as Partial<AvatarCache> | null;
+    if (raw && typeof raw.salt === "string" && raw.salt && typeof raw.entries === "object") {
+      return { salt: raw.salt, entries: raw.entries ?? {} };
+    }
   } catch {
-    return {};
+    // 损坏的缓存按不存在处理
   }
+  return fresh(); // 旧格式（无盐）整体作废：文件名规则已变，重新下载
 }
 
-/** 删除该 wxid 的所有已存在文件（换格式/换 URL 时清旧） */
-function removeFilesFor(dir: string, wxid: string): void {
-  for (const ext of ["jpg", "png", "gif", "webp"] as const) {
-    const p = join(dir, `${wxid}.${ext}`);
-    if (existsSync(p)) rmSync(p);
-  }
+/** 头像落盘文件名：盐化哈希，不暴露 wxid */
+function fileNameFor(salt: string, wxid: string): string {
+  const h = createHash("sha256").update(`${salt}:${wxid}`).digest("hex").slice(0, 16);
+  return `${h}.${OUTPUT_EXT}`;
 }
 
 // ---------- 主流程 ----------
@@ -189,31 +197,31 @@ export async function syncAvatars(
   const queue = [...urls.entries()];
 
   async function processOne(wxid: string, url: string): Promise<void> {
-    if (!WXID_RE.test(wxid)) {
-      result.stats.failed++;
-      result.failures.push({ wxid, reason: "wxid 含非法字符，不作为文件名" });
-      return;
-    }
-    // 缓存命中：同 URL、同规格、文件仍在
-    const hit = cache[wxid];
-    if (hit && hit.url === url && hit.spec === SPEC && existsSync(join(opts.dir, hit.file))) {
-      result.files.set(wxid, hit.file);
+    const file = fileNameFor(cache.salt, wxid);
+    // 缓存命中：同 URL、同规格、文件名未变（盐未变）、文件仍在
+    const hit = cache.entries[wxid];
+    if (
+      hit &&
+      hit.url === url &&
+      hit.spec === SPEC &&
+      hit.file === file &&
+      existsSync(join(opts.dir, file))
+    ) {
+      result.files.set(wxid, file);
       result.stats.cached++;
       return;
     }
     try {
       const raw = await fetchImage(url);
       const out = await toThumbnail(raw);
-      const file = `${wxid}.${OUTPUT_EXT}`;
-      removeFilesFor(opts.dir, wxid);
       const tmp = join(opts.dir, `${file}.tmp`);
       writeFileSync(tmp, out);
-      renameSync(tmp, join(opts.dir, file)); // 原子落盘，避免半截文件
-      cache[wxid] = { url, spec: SPEC, file };
+      renameSync(tmp, join(opts.dir, file)); // 原子落盘，避免半截文件；旧命名的遗留文件由收尾清理删除
+      cache.entries[wxid] = { url, spec: SPEC, file };
       result.files.set(wxid, file);
       result.stats.downloaded++;
     } catch (e) {
-      delete cache[wxid];
+      delete cache.entries[wxid];
       result.stats.failed++;
       result.failures.push({ wxid, reason: e instanceof Error ? e.message : String(e) });
     }
@@ -239,8 +247,8 @@ export async function syncAvatars(
       result.stats.pruned++;
     }
   }
-  for (const wxid of Object.keys(cache)) {
-    if (!result.files.has(wxid)) delete cache[wxid];
+  for (const wxid of Object.keys(cache.entries)) {
+    if (!result.files.has(wxid)) delete cache.entries[wxid];
   }
 
   writeFileSync(opts.cacheFile, `${JSON.stringify(cache, null, 2)}\n`);

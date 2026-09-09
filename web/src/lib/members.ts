@@ -4,13 +4,15 @@
  */
 
 export interface MemberRecord {
-  wxid: string;
-  alias: string;
+  /** 微信内部 id；public 模式（默认）下整个字段不存在（见 config.omittedFields） */
+  wxid?: string;
+  /** 微信号；public 模式下整个字段不存在 */
+  alias?: string;
   nickName: string;
   displayName: string;
-  /** 采集者备注；public 模式（默认）下整个字段不存在（见 config.omittedFields） */
+  /** 采集者备注；public 模式下整个字段不存在 */
   remark?: string;
-  /** 站点根相对路径 avatars/<wxid>.webp；无头像为 null */
+  /** 站点根相对路径 avatars/<hash>.webp（盐化哈希，不含 wxid）；无头像为 null */
   avatar: string | null;
   msgCount: number;
 }
@@ -57,16 +59,24 @@ export function initialOf(name: string): string {
   return first ? first.segment : "?";
 }
 
-/** 占位底色：按 wxid 稳定哈希到色相环，同一人每次构建颜色一致 */
-export function hueOf(wxid: string): number {
+/**
+ * 占位底色：按种子字符串稳定哈希到色相环。
+ * 种子优先 wxid（private），public 产物无 wxid 时用头像路径 / 展示名兜底（见 seedOf）
+ */
+export function hueOf(seed: string): number {
   let h = 0;
-  for (let i = 0; i < wxid.length; i++) h = (h * 31 + wxid.charCodeAt(i)) >>> 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
   return h % 360;
+}
+
+/** 占位色种子：wxid → 头像路径（盐化哈希，同人稳定）→ 展示名 */
+export function seedOf(m: MemberRecord): string {
+  return m.wxid || m.avatar || displayNameOf(m);
 }
 
 /** 搜索索引：把可检索文本拼成一个小写字符串，挂到 data-search 上供浏览器端过滤 */
 export function searchTextOf(m: MemberRecord): string {
-  return [m.displayName, m.nickName, m.alias, m.remark ?? ""]
+  return [m.displayName, m.nickName, m.alias ?? "", m.remark ?? ""]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();

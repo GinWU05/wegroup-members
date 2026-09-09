@@ -65,11 +65,11 @@ wegroup-members/
    - **统计口径**：排除系统消息（type=10000）与无 sender / sender=`系统消息` 的记录；其余类型（文本 1、图片 3、视频 43、**表情包 47 算发言**、链接/引用/文件 49 等）全部计为发言。口径写入 `config.countingRule` 并在站点明示
    - **退群成员**：只输出采集时点的当前成员；已退群者的发言不计入榜单（脚本日志打印被排除的人数/条数以便核对）
    - **非法 sender**：Chatlog 对部分引用消息会把消息 XML 塞进 `sender` 字段，用 `^[A-Za-z0-9_\-@.]+$` 校验 wxid 格式，不合法的归入排除（实测约 200 条/年）
-4. 头像下载原图并本地缩放为 `avatars/<wxid>.webp`（`scripts/lib/avatars.ts`，sharp）：
+4. 头像下载原图并本地缩放为 `avatars/<hash>.webp`（`scripts/lib/avatars.ts`，sharp；文件名是 sha256(盐:wxid) 前 16 位，盐随缓存持久化于本地、不部署，产物中不暴露 wxid）：
    - **准入**：URL 必须 `https://wx.qlogo.cn/`，且 wxid 经 `chatroom_member` 确认为群成员；重定向每一跳重新校验 host，最多 3 跳
    - **响应校验**：`Content-Type: image/*` → 流式读取上限 1 MB（不信任 Content-Length；原图实测最大 ~160 KB）→ 魔数必须 JPEG/PNG/GIF/WEBP → 才交给 sharp 解码，源图边长 > 4096 拒绝（防解压炸弹）
    - **缩放**：按 EXIF 方向摆正 → 居中裁方 → 256×256 WebP q82，不保留任何元数据（隐私加分）。实测 445 张共 4.3 MB，中位 7.5 KB；只部署缩放版，原图不落盘
-   - **缓存**：`data/avatar-cache.json` 记 wxid → {url, spec, file}，URL 与规格未变且文件在则不重下；改 `OUTPUT_SIZE`/质量需 bump `SPEC` 让缓存整体失效。全量 445 张首次 ~16 s，命中缓存 ~0 s
+   - **缓存**：`data/avatar-cache.json` 记文件名哈希盐 + wxid → {url, spec, file}，URL 与规格未变且文件在则不重下；改 `OUTPUT_SIZE`/质量需 bump `SPEC` 让缓存整体失效；缓存丢失/损坏则盐重生成、全量重下（文件名全部换新）。全量 445 张首次 ~16 s，命中缓存 ~0 s
    - **清理**：每次采集后删除目录内不属于本次成员的旧头像与残留 `.tmp`，保证磁盘文件 == members.json 引用
    - **降级**：任一步失败 → `avatar: null`，日志打印原因，展示层首字母占位；`--no-avatars` 可跳过下载只跑统计
 5. 产出统一 schema 的 `members.json`：
@@ -85,16 +85,16 @@ wegroup-members/
     "memberCount": 447,       // 成员数
     "countingRule": "...",    // 统计口径
     "mode": "public",         // public | private；展示层在 private 时挂红色警示横幅
-    "omittedFields": ["remark"] // 本文件删掉的字段；private 为 []
+    "omittedFields": ["wxid", "alias", "remark"] // 本文件删掉的字段；private 为 []
   },
   "members": [                // 按 msgCount 降序
     {
-      "wxid": "...",          // 微信内部 id
-      "alias": "...",         // 微信号
+      "wxid": "...",          // 微信内部 id；仅 private 模式存在
+      "alias": "...",         // 微信号；仅 private 模式存在
       "nickName": "...",      // 微信昵称
       "displayName": "...",   // 群昵称
       "remark": "...",        // 采集者备注；仅 private 模式存在
-      "avatar": "...",        // 站点根相对路径 avatars/<wxid>.webp（256×256），可 null
+      "avatar": "...",        // 站点根相对路径 avatars/<hash>.webp（256×256，盐化哈希文件名），可 null
       "msgCount": 123         // 发言数
     }
   ]
@@ -105,8 +105,8 @@ wegroup-members/
 
 - **展示名**：`displayName` → `nickName`（不使用 `remark`，它是采集者视角不是本人视角；可作副标题或搜索字段）
 - **头像**：`avatar` → 展示名首字符占位
-- **微信号**：`alias` → 为空时不展示该行（不用 wxid 顶替，避免把系统分配的 wxid_xxx 当微信号误导读者）
-- 空值统一用 `""`（字符串字段）或 `null`（仅 `avatar`），不省略字段、不用 `undefined`。唯一例外：`config.omittedFields` 列出的字段整个不存在（public 模式下的 `remark`），展示层按可选字段处理：在 `index.astro` 顶部读 `omittedFields` **判一次**得出 `showRemark`，往下传 prop，不在各处重复判
+- **微信号**：`alias` → 为空时不展示该行（不用 wxid 顶替，避免把系统分配的 wxid_xxx 当微信号误导读者）；public 产物无此字段，整行不渲染
+- 空值统一用 `""`（字符串字段）或 `null`（仅 `avatar`），不省略字段、不用 `undefined`。唯一例外：`config.omittedFields` 列出的字段整个不存在（public 模式下的 `wxid`/`alias`/`remark`），展示层按可选字段处理：在 `index.astro` 顶部读 `omittedFields` **判一次**得出 `showRemark`/`showAlias`，往下传 prop，不在各处重复判
 
 ### Web 层（web/）
 
@@ -115,7 +115,7 @@ wegroup-members/
 - **活跃成员**：发言数排进发过言成员的前 25%（P75 分位向上取整；`activeThresholdOf`，百分比常量 `ACTIVE_TOP_PERCENT`）。0 条者不参与计算——半数以上成员 0 条，算进去门槛会被压到 0。门槛构建期算好，卡片挂 `data-active` + `.active`（头像强调色描边、发言数强调色），概览与统计口径里写明当次门槛，浏览器端不重算
 - **发言数分布柱状图**（`MsgHistogram.astro` + `lib/histogram.ts`）：X = 发言条数（对数刻度），Y = 人数；每根柱按活跃/其他两色堆叠，一眼看出门槛落在哪里。分界点只用 1-2-5 类“顺眼”数（`MANTISSA_SETS` 由疏到密四组），选最疏一组使柱数落在 `MIN_BARS`~`MAX_BARS`（10~30），换群不调参；实测最大 3 万条 → 14 根。0 条者放不进对数轴，图下注释写人数。纯 HTML/CSS（flex 高度百分比）不用 SVG，因为 SVG viewBox 缩放会把手机端文字缩到看不见；窄屏且 ≥ 12 根时隐去柱顶数值、x 轴标签隔一显一（title/sr-only 仍全）
 - **名次**：只给发过言的成员标 `#n`，零发言成员不计名次（发言数灰显），但 `data-rank` 仍全员连续供排序用
-- 展示回退约定的实现集中在 `web/src/lib/members.ts`（`displayNameOf` 剔控制字符后回退，全空显“（无昵称）”不用 wxid 顶替；实测有昵称是 4 个 U+007F / `initialOf` 用 `Intl.Segmenter` 按 grapheme 取首字，emoji 不会被劣成两半 / `hueOf` 按 wxid 哈希占位底色 / `searchTextOf` / `quantileOf` / `activeThresholdOf`）；`remark` 是否渲染由 `config.omittedFields` 决定，public 构建产物中“备注”字样与 `remark` 字符串 0 次出现（已验证）
+- 展示回退约定的实现集中在 `web/src/lib/members.ts`（`displayNameOf` 剔控制字符后回退，全空显“（无昵称）”不用 wxid 顶替；实测有昵称是 4 个 U+007F / `initialOf` 用 `Intl.Segmenter` 按 grapheme 取首字，emoji 不会被劣成两半 / `hueOf` 按种子哈希占位底色，种子由 `seedOf` 给：wxid（private）→ 头像路径（盐化哈希，同人稳定）→ 展示名 / `searchTextOf` / `quantileOf` / `activeThresholdOf`）；`remark`/`alias` 是否渲染由 `config.omittedFields` 决定，public 构建产物中“备注”“微信号”字样与 wxid/alias/remark 值 0 次出现（每次采集后复核）
 - **members.json 不会被部署**：它在 `web/src/data/`，frontmatter `import` 是构建期读取，渲染完即丢；`web/dist/` 里没有任何 `.json`（每次改动后用 `find web/dist -name '*.json'` 复核）。只有 `web/public/` 下的文件会原样进产物，所以**不要把数据放进 public/**。但页面上渲染出的字段在 HTML 里就是明文，隐私防线是“不该展示的字段根本不进 members.json”（public 模式），而不是展示层隐藏
 - **private 警示横幅**：`config.mode === "private"` 时页顶 sticky 红色横幅“仅供本机预览，禁止部署”，防止误把 private 产物上线
 - 群名、简称、年份、口径等全部来自 `config` → 换群不改代码（群名等字面值不写进任何入库文件，包括模板）；`<meta name="robots" content="noindex, nofollow">`
@@ -134,12 +134,12 @@ wegroup-members/
 核心原则：**代码无害，数据有害** —— 代码与数据彻底分离后可安全开源。
 
 - 仓库只含采集脚本 + Web 模板；`data/`、`avatars/`、`*.local.json`（群特定配置）全部 gitignore
-- **公开字段决策**：`alias`、`wxid` 允许进入公开产物；头像文件名直接用 wxid（无需 hash）；`remark` 是采集者私有视角，**不进公开产物**（2026-09-09 改，推翻 09-06 “remark 可公开”的决定）
+- **公开字段决策**：`wxid`、`alias`、`remark` 均**不进公开产物**（2026-09-09 二次收紧，推翻同日早些“wxid/alias 可公开”与 09-06 “remark 可公开”）：wxid/alias 可定位到具体微信账号，remark 是采集者私有视角。头像文件名随之改为盐化哈希（sha256(盐:wxid) 前 16 位），不再直接用 wxid
 - 注意：CF Pages 部署即数据可见（受访问控制约束，见部署节）。上线前仍需征得群成员/群主同意
 - **两种输出模式，默认 public**（2026-09-09，原来是反的：默认全量、`:private` 才剥离；现已对调，“不加参数就是安全的”）
   - `pnpm collect` = `pnpm collect:public`：删除 `PUBLIC_STRIPPED_FIELDS`，产物可部署 / 分享给群成员
   - `pnpm collect:private`（`--private`）：全量输出，仅采集者本机自用，勿部署；站点会挂红色警示横幅
-  - **删除字段清单只有一个事实来源**：`scripts/collect.ts` 的 `PUBLIC_STRIPPED_FIELDS`（当前：`remark`）。类型为 `(keyof Member)[]`，写错字段名或字段已从 schema 删除时 `typecheck` 直接报错；剥离逻辑、日志、`config.omittedFields` 全部由它派生。日后要收紧更多字段（如 `alias`）只改这一行
+  - **删除字段清单只有一个事实来源**：`scripts/collect.ts` 的 `PUBLIC_STRIPPED_FIELDS`（当前：`wxid`、`alias`、`remark`）。类型为 `(keyof Member)[]`，写错字段名或字段已从 schema 删除时 `typecheck` 直接报错；剥离逻辑、日志、`config.omittedFields` 全部由它派生。日后增减字段只改这一行
   - 产物自描述：`config.mode` 写明模式，`config.omittedFields` 写明删了哪些字段（private 为 `[]`），展示层不硬编码
 
 ### 2. 通用性 / monorepo

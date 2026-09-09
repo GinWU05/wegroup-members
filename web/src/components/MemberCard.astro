@@ -1,5 +1,12 @@
 ---
-import { displayNameOf, hueOf, initialOf, type MemberRecord, searchTextOf } from "../lib/members";
+import {
+  displayNameOf,
+  hueOf,
+  initialOf,
+  type MemberRecord,
+  searchTextOf,
+  seedOf,
+} from "../lib/members";
 
 interface Props {
   member: MemberRecord;
@@ -13,7 +20,7 @@ interface Props {
 const { member: m, rank, active, showRemark } = Astro.props;
 const spoke = m.msgCount > 0;
 const name = displayNameOf(m);
-const hue = hueOf(m.wxid);
+const hue = hueOf(seedOf(m));
 // 副标题：群昵称与微信昵称不同时补充微信昵称，避免重复显示
 const subtitle = m.displayName && m.nickName && m.displayName !== m.nickName ? m.nickName : "";
 const remark = showRemark ? (m.remark ?? "") : "";
