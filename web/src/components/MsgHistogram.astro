@@ -35,8 +35,8 @@ const pct = (n: number) => `${((n / yMax) * 100).toFixed(2)}%`;
             {ticks.slice(1).map((t) => <i style={`bottom: ${pct(t)}`} />)}
           </div>
           <ol class="bars">
-            {buckets.map((b, i) => {
-              const label = rangeLabel(b, i === buckets.length - 1);
+            {buckets.map((b) => {
+              const label = rangeLabel(b);
               const tip = `${label}：${b.total} 人${b.active ? `，其中活跃 ${b.active} 人` : ""}`;
               return (
                 <li class="bar" title={tip}>
@@ -51,15 +51,13 @@ const pct = (n: number) => `${((n / yMax) * 100).toFixed(2)}%`;
             })}
           </ol>
           <div class="x-axis" aria-hidden="true">
-            {buckets.map((b, i) => (
-              <span>{i === buckets.length - 1 ? `${formatEdge(b.lo)}+` : formatEdge(b.lo)}</span>
-            ))}
+            {buckets.map((b) => <span>{b.open ? `${formatEdge(b.lo)}+` : formatEdge(b.lo)}</span>)}
           </div>
         </div>
       </div>
 
       <p class="note">
-        横轴为发言条数（对数刻度，标签是每根柱的下限，如“10”指 10~19 条），纵轴为人数。另有 {silentCount} 人未发言，不在图中。
+        横轴为发言条数（从多到少，对数刻度；标签是每根柱的下限，如“10”指 10~19 条），纵轴为人数。另有 {silentCount} 人未发言，不在图中。
       </p>
     </figure>
   )

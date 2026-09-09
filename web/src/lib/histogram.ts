@@ -6,6 +6,8 @@ export interface Bucket {
   hi: number;
   total: number;
   active: number;
+  /** 最高一桶（含最大值），文案写成“≥ lo” */
+  open: boolean;
 }
 
 /** 柱数范围；分桶密度在这个范围内按数据自适应 */
@@ -44,7 +46,10 @@ export function bucketEdges(max: number): number[] {
   return logEdges(max, DENSEST);
 }
 
-/** 只统计发过言的成员：0 条放不进对数轴，由展示层另行说明人数 */
+/**
+ * 只统计发过言的成员：0 条放不进对数轴，由展示层另行说明人数。
+ * 返回顺序：发言最多的桶在前（与卡片墙默认排序一致）。
+ */
 export function buildHistogram(members: MemberRecord[], activeThreshold: number): Bucket[] {
   const counts = members.map((m) => m.msgCount).filter((c) => c > 0);
   if (counts.length === 0) return [];
@@ -59,9 +64,10 @@ export function buildHistogram(members: MemberRecord[], activeThreshold: number)
       hi,
       total: inBucket.length,
       active: inBucket.filter((c) => c >= activeThreshold).length,
+      open: i === edges.length - 1,
     });
   }
-  return buckets;
+  return buckets.reverse();
 }
 
 /** 纵轴刻度：从 0 到略高于最高柱的整数上限，步长取 1/2/5×10^k 中让格数不超过 5 的最小者 */
@@ -74,16 +80,16 @@ export function yTicks(maxCount: number): number[] {
   return ticks;
 }
 
-/** 横轴分界的紧凑写法：1000 → 1千，20000 → 2万，其余原样 */
+/** 横轴分界的紧凑写法：1000 → 1k，20000 → 2w，其余原样 */
 export function formatEdge(n: number): string {
-  if (n >= 10000) return `${n / 10000}万`;
-  if (n >= 1000) return `${n / 1000}千`;
+  if (n >= 10000) return `${n / 10000}w`;
+  if (n >= 1000) return `${n / 1000}k`;
   return String(n);
 }
 
-/** 柱子的区间文案：单值 / 区间 / 最后一桶写成"≥ 下界" */
-export function rangeLabel(b: Bucket, isLast: boolean): string {
-  if (isLast) return `≥ ${b.lo} 条`;
+/** 柱子的区间文案：单值 / 区间 / 最高一桶写成“≥ 下界” */
+export function rangeLabel(b: Bucket): string {
+  if (b.open) return `≥ ${b.lo} 条`;
   if (b.lo === b.hi) return `${b.lo} 条`;
   return `${b.lo}~${b.hi} 条`;
 }
