@@ -16,6 +16,7 @@
     "web:build": "astro build --root web",
     "web:preview": "astro preview --root web",
     "web:check": "astro check --root web",
+    "web:deploy": "node --disable-warning=ExperimentalWarning scripts/deploy.ts",
     "typecheck": "tsc --noEmit && astro check --root web",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
@@ -26,7 +27,8 @@
     "@biomejs/biome": "^2.5.12",
     "@types/node": "^22.20.1",
     "astro": "^7.3.2",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "wrangler": "^4.130.0"
   },
   "dependencies": {
     "sharp": "^0.35.4"
