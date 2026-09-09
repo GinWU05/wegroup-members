@@ -72,23 +72,31 @@ export function searchTextOf(m: MemberRecord): string {
     .toLowerCase();
 }
 
-/** 中位数；空数组返回 0。偶数个时取中间两数平均 */
-export function medianOf(nums: number[]): number {
+/**
+ * 分位数：p ∈ [0, 1]，返回从小到大排列后位于 p 处的值（落在两数之间时线性插值）。
+ * p = 0.5 就是中位数；空数组返回 0。
+ */
+export function quantileOf(nums: number[], p: number): number {
   if (nums.length === 0) return 0;
   const s = [...nums].sort((a, b) => a - b);
-  const mid = Math.floor(s.length / 2);
-  const lo = s[mid - 1] ?? 0;
-  const hi = s[mid] ?? 0;
-  return s.length % 2 === 1 ? hi : (lo + hi) / 2;
+  const pos = (s.length - 1) * p;
+  const lo = s[Math.floor(pos)] ?? 0;
+  const hi = s[Math.ceil(pos)] ?? 0;
+  return lo + (hi - lo) * (pos - Math.floor(pos));
 }
 
+/** 活跃 = 发言数排进发过言成员的前 25%（页面文案也用这个数，改这里两处同步） */
+export const ACTIVE_TOP_PERCENT = 25;
+
 /**
- * 活跃门槛：发过言成员发言数的中位数，向上取整（发言数是整数，≥ 26.5 等价于 ≥ 27）。
- * 不用全员中位数——半数以上成员是 0 条，全员中位数恒为 0，无区分度。
+ * 活跃门槛：发过言成员发言数的前 25% 分位（即 P75），向上取整。
+ * - 0 条者不参与：半数以上成员从不发言，算进去会把门槛压到 0
+ * - 用分位数不用平均数：群聊发言是长尾分布，平均数会被头部几人拉走；分位数对分布形状不敏感，换群不调参
+ * - 选 25% 而非 50%：实测中位数门槛 27 条/年（每月 3 条）叫“活跃”太勉强，前 25% 门槛 255 条（约每天 1 条）符合直觉
  */
 export function activeThresholdOf(members: MemberRecord[]): number {
   const spoke = members.filter((m) => m.msgCount > 0).map((m) => m.msgCount);
-  return Math.ceil(medianOf(spoke));
+  return Math.ceil(quantileOf(spoke, 1 - ACTIVE_TOP_PERCENT / 100));
 }
 
 /** 2026-09-08T00:56:54+08:00 → 2026-09-08 00:56 */

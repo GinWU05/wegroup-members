@@ -5,7 +5,7 @@ interface Props {
   member: MemberRecord;
   /** 排序序号（1 起）；发言为 0 的成员不展示名次，只用于浏览器端排序 */
   rank: number;
-  /** 发言数 ≥ 活跃门槛（发过言成员的中位数），由页面统一算好传入 */
+  /** 发言数 ≥ 活跃门槛（发过言成员的前 25%），由页面统一算好传入 */
   active: boolean;
   showRemark: boolean;
 }

@@ -1,7 +1,12 @@
 ---
 import MemberCard from "../components/MemberCard.astro";
 import raw from "../data/members.json";
-import { activeThresholdOf, formatDateTime, type MembersData } from "../lib/members";
+import {
+  ACTIVE_TOP_PERCENT,
+  activeThresholdOf,
+  formatDateTime,
+  type MembersData,
+} from "../lib/members";
 import "../styles/global.css";
 
 const data = raw as MembersData;
@@ -15,7 +20,7 @@ const isPrivateBuild = config.mode === "private";
 const sorted = [...members].sort((a, b) => b.msgCount - a.msgCount || a.wxid.localeCompare(b.wxid));
 const spokeCount = members.filter((m) => m.msgCount > 0).length;
 const totalMsgs = members.reduce((s, m) => s + m.msgCount, 0);
-// 活跃 = 发言数 ≥ 发过言成员的中位数；门槛与人数都从数据算出，不写死
+// 活跃 = 发言数排进发过言成员的前 25%；门槛与人数都从数据算出，不写死
 const activeThreshold = activeThresholdOf(members);
 const activeCount = members.filter((m) => m.msgCount >= activeThreshold).length;
 const title = `${config.groupShortName}·成员信息`;
@@ -62,7 +67,7 @@ const title = `${config.groupShortName}·成员信息`;
           <summary>统计口径</summary>
           <p>{config.countingRule}</p>
           <p>
-            “活跃成员”指发言数不低于发过言成员的中位数（本次为 {activeThreshold} 条），卡片上以蓝色发言数标示。
+            “活跃成员”指发言数排在发过言成员的前 {ACTIVE_TOP_PERCENT}%（本次门槛为 {activeThreshold} 条），卡片上以蓝色发言数标示。
           </p>
         </details>
       </div>
@@ -156,7 +161,7 @@ const title = `${config.groupShortName}·成员信息`;
         "name-asc": (a, b) => collator.compare(nameOf(a), nameOf(b)),
       };
 
-      // 范围筛选：活跃与否由构建期算好的 data-active 决定，浏览器端不重算中位数
+      // 范围筛选：活跃与否由构建期算好的 data-active 决定，浏览器端不重算门槛
       const showAll = () => true;
       const scopes: Record<string, (c: HTMLLIElement) => boolean> = {
         all: showAll,
