@@ -40,7 +40,7 @@ wegroup-members/
 │   │   ├── lib/members.ts          # schema 类型 + 展示回退约定的实现
 │   │   ├── styles/global.css
 │   │   └── data/members.json       # 构建期输入（gitignore）
-│   └── public/avatars/    # 本地化头像（gitignore）
+│   └── public/            # 原样进产物；favicon.svg/png 入库，avatars/ gitignore。Biome 不检查此目录
 ├── group.local.json       # 群特定配置（gitignore）
 └── .gitignore             # data/、avatars/、*.local、*.local.json
 ```
@@ -109,8 +109,10 @@ wegroup-members/
 ### Web 层（web/）
 
 - **Astro 7 静态输出，零 island**：`members.json` 在 frontmatter 里 `import`，447 张卡片构建期渲染成 HTML；浏览器端只有一段原生 `<script>` 做过滤/重排（卡片挂 `data-search` / `data-count` / `data-name` / `data-rank`，过滤切 `hidden`，排序用 `append` 移动既有节点）。不加 React/Preact 等 island，否则丢掉零 JS 优势
-- 布局：顶部群概览（群名、成员数、今年发过言人数、发言总数、数据截止/采集时间、可展开的统计口径）+ 工具栏（搜索 / 排序：发言最多·最少·名称 / 只看发过言的）+ 成员卡片墙（auto-fill 网格，最小列宽 `min(300px, 100%)`，375px 标准手机宽已验证不溢出）
-- 展示回退约定的实现集中在 `web/src/lib/members.ts`（`displayNameOf` / `initialOf` 用 `Intl.Segmenter` 按 grapheme 取首字，emoji 不会被劣成两半 / `hueOf` 按 wxid 哈希占位底色 / `searchTextOf`）；`remark` 是否渲染由 `config.omittedFields` 决定，public 构建产物中“备注”字样与 `remark` 字符串 0 次出现（已验证）
+- 布局：顶部群概览（简称标题、成员数、今年发过言人数、活跃成员数、发言总数、数据截止/采集时间、可展开的统计口径；窄屏指标 2×2）+ 工具栏（搜索 / 排序：发言最多·最少·名称 / 范围：全部成员·活跃成员·有发言的）+ 成员卡片墙（auto-fill 网格，最小列宽 `min(300px, 100%)`，375px 标准手机宽已验证不溢出）
+- **活跃成员**：发言数 ≥ 发过言成员发言数的中位数（向上取整；`activeThresholdOf`）。不用全员中位数——半数以上成员 0 条，全员中位数恒为 0。门槛构建期算好，卡片挂 `data-active` + `.active`（头像强调色描边、发言数强调色），概览与统计口径里写明当次门槛，浏览器端不重算
+- **名次**：只给发过言的成员标 `#n`，零发言成员不计名次（发言数灰显），但 `data-rank` 仍全员连续供排序用
+- 展示回退约定的实现集中在 `web/src/lib/members.ts`（`displayNameOf` 剔控制字符后回退，全空显“（无昵称）”不用 wxid 顶替；实测有昵称是 4 个 U+007F / `initialOf` 用 `Intl.Segmenter` 按 grapheme 取首字，emoji 不会被劣成两半 / `hueOf` 按 wxid 哈希占位底色 / `searchTextOf` / `medianOf` / `activeThresholdOf`）；`remark` 是否渲染由 `config.omittedFields` 决定，public 构建产物中“备注”字样与 `remark` 字符串 0 次出现（已验证）
 - **members.json 不会被部署**：它在 `web/src/data/`，frontmatter `import` 是构建期读取，渲染完即丢；`web/dist/` 里没有任何 `.json`（每次改动后用 `find web/dist -name '*.json'` 复核）。只有 `web/public/` 下的文件会原样进产物，所以**不要把数据放进 public/**。但页面上渲染出的字段在 HTML 里就是明文，隐私防线是“不该展示的字段根本不进 members.json”（public 模式），而不是展示层隐藏
 - **private 警示横幅**：`config.mode === "private"` 时页顶 sticky 红色横幅“仅供本机预览，禁止部署”，防止误把 private 产物上线
 - 群名、简称、年份、口径等全部来自 `config` → 换群不改代码（群名等字面值不写进任何入库文件，包括模板）；`<meta name="robots" content="noindex, nofollow">`
@@ -171,7 +173,7 @@ wegroup-members/
 
 - [x] M1 采集脚本：群成员（chatroom API）+ 联系人信息（contact.db 只读）+ 年度发言计数（按月分片）→ `members.json`
 - [x] M2 头像本地化：下载原图 / 校验 / 缩放 256 WebP / 缓存 / 清理 / 降级（`scripts/lib/avatars.ts`，实测 445/445）
-- [x] M3 Web 站点：Astro 静态卡片墙 + 搜索 / 排序 / 只看发过言的（`web/`，零 island）
+- [x] M3 Web 站点：Astro 静态卡片墙 + 搜索 / 排序 / 范围筛选 / 活跃标识（`web/`，零 island）
 - [x] M4 输出模式：默认 public（删 `PUBLIC_STRIPPED_FIELDS`），`collect:private` 全量仅本机；站点对 private 产物挂警示
 - [ ] M5 CF Pages 部署（**必须 CF Access 或口令**）
 - [ ] M6（可选）域名购买与绑定

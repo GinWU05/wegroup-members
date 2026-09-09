@@ -3,11 +3,15 @@ import { displayNameOf, hueOf, initialOf, type MemberRecord, searchTextOf } from
 
 interface Props {
   member: MemberRecord;
+  /** 排序序号（1 起）；发言为 0 的成员不展示名次，只用于浏览器端排序 */
   rank: number;
+  /** 发言数 ≥ 活跃门槛（发过言成员的中位数），由页面统一算好传入 */
+  active: boolean;
   showRemark: boolean;
 }
 
-const { member: m, rank, showRemark } = Astro.props;
+const { member: m, rank, active, showRemark } = Astro.props;
+const spoke = m.msgCount > 0;
 const name = displayNameOf(m);
 const hue = hueOf(m.wxid);
 // 副标题：群昵称与微信昵称不同时补充微信昵称，避免重复显示
@@ -16,11 +20,12 @@ const remark = showRemark ? (m.remark ?? "") : "";
 ---
 
 <li
-  class="card"
+  class:list={["card", { active }]}
   data-search={searchTextOf(m)}
   data-count={m.msgCount}
   data-name={name.toLowerCase()}
   data-rank={rank}
+  data-active={active ? "" : undefined}
 >
   <div class="avatar" style={`--hue: ${hue}`}>
     {
@@ -33,14 +38,17 @@ const remark = showRemark ? (m.remark ?? "") : "";
   </div>
   <div class="body">
     <div class="title-row">
-      <span class="rank">#{rank}</span>
+      {spoke && <span class="rank">#{rank}</span>}
       <h3 class="name" title={name}>{name}</h3>
     </div>
     {subtitle && <p class="sub" title={subtitle}>{subtitle}</p>}
     {m.alias && <p class="alias">微信号 {m.alias}</p>}
     {remark && <p class="remark">备注 {remark}</p>}
   </div>
-  <div class="count" title={`${m.msgCount} 条发言`}>
+  <div
+    class:list={["count", { zero: !spoke }]}
+    title={active ? `${m.msgCount} 条发言，活跃成员` : `${m.msgCount} 条发言`}
+  >
     <span class="num">{m.msgCount.toLocaleString("zh-CN")}</span>
     <span class="unit">条</span>
   </div>
@@ -63,6 +71,13 @@ const remark = showRemark ? (m.remark ?? "") : "";
   }
   .card[hidden] {
     display: none;
+  }
+  /* 活跃成员：头像描边 + 发言数用强调色 */
+  .card.active .avatar {
+    box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent);
+  }
+  .card.active .num {
+    color: var(--accent);
   }
 
   .avatar {
@@ -110,9 +125,14 @@ const remark = showRemark ? (m.remark ?? "") : "";
     margin: 0;
     font-size: 1rem;
     font-weight: 600;
-    white-space: nowrap;
+    line-height: 1.3;
+    /* 最多两行，超出截断；手机上长名字不至于只剩三个字 */
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
     overflow: hidden;
-    text-overflow: ellipsis;
+    overflow-wrap: anywhere;
   }
   .sub,
   .alias,
@@ -136,6 +156,10 @@ const remark = showRemark ? (m.remark ?? "") : "";
   .num {
     font-size: 1.15rem;
     font-weight: 700;
+  }
+  .count.zero .num {
+    color: var(--muted);
+    font-weight: 500;
   }
   .unit {
     font-size: 0.75rem;

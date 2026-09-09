@@ -35,15 +35,22 @@ export interface MembersData {
   members: MemberRecord[];
 }
 
-/** 展示名：群昵称 → 微信昵称。不用 remark（采集者视角） */
+/** 昵称里的控制字符（实测有人昵称是 4 个 U+007F）渲染为空白，剔掉后再判空 */
+function cleanName(s: string): string {
+  return s.replace(/\p{Cc}/gu, "").trim();
+}
+
+export const NO_NAME = "（无昵称）";
+
+/** 展示名：群昵称 → 微信昵称 → 占位。不用 remark（采集者视角），也不用 wxid 充当名字 */
 export function displayNameOf(m: MemberRecord): string {
-  return m.displayName || m.nickName || m.wxid;
+  return cleanName(m.displayName) || cleanName(m.nickName) || NO_NAME;
 }
 
 /** 头像占位：展示名的首个"用户可感知字符"（正确处理 emoji / 组合字符），无法取到时用 "?" */
 export function initialOf(name: string): string {
   const trimmed = name.trim();
-  if (!trimmed) return "?";
+  if (!trimmed || trimmed === NO_NAME) return "?";
   // Intl.Segmenter 按 grapheme 切分，避免把 emoji / 代理对劈成两半
   const seg = new Intl.Segmenter("zh", { granularity: "grapheme" });
   const first = seg.segment(trimmed)[Symbol.iterator]().next().value;
@@ -63,6 +70,25 @@ export function searchTextOf(m: MemberRecord): string {
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
+}
+
+/** 中位数；空数组返回 0。偶数个时取中间两数平均 */
+export function medianOf(nums: number[]): number {
+  if (nums.length === 0) return 0;
+  const s = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(s.length / 2);
+  const lo = s[mid - 1] ?? 0;
+  const hi = s[mid] ?? 0;
+  return s.length % 2 === 1 ? hi : (lo + hi) / 2;
+}
+
+/**
+ * 活跃门槛：发过言成员发言数的中位数，向上取整（发言数是整数，≥ 26.5 等价于 ≥ 27）。
+ * 不用全员中位数——半数以上成员是 0 条，全员中位数恒为 0，无区分度。
+ */
+export function activeThresholdOf(members: MemberRecord[]): number {
+  const spoke = members.filter((m) => m.msgCount > 0).map((m) => m.msgCount);
+  return Math.ceil(medianOf(spoke));
 }
 
 /** 2026-09-08T00:56:54+08:00 → 2026-09-08 00:56 */

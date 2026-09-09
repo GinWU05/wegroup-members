@@ -1,7 +1,7 @@
 ---
 import MemberCard from "../components/MemberCard.astro";
 import raw from "../data/members.json";
-import { formatDateTime, type MembersData } from "../lib/members";
+import { activeThresholdOf, formatDateTime, type MembersData } from "../lib/members";
 import "../styles/global.css";
 
 const data = raw as MembersData;
@@ -13,8 +13,11 @@ const showRemark = !config.omittedFields.includes("remark");
 const isPrivateBuild = config.mode === "private";
 
 const sorted = [...members].sort((a, b) => b.msgCount - a.msgCount || a.wxid.localeCompare(b.wxid));
-const activeCount = members.filter((m) => m.msgCount > 0).length;
+const spokeCount = members.filter((m) => m.msgCount > 0).length;
 const totalMsgs = members.reduce((s, m) => s + m.msgCount, 0);
+// 活跃 = 发言数 ≥ 发过言成员的中位数；门槛与人数都从数据算出，不写死
+const activeThreshold = activeThresholdOf(members);
+const activeCount = members.filter((m) => m.msgCount >= activeThreshold).length;
 const title = `${config.groupShortName}·成员信息`;
 ---
 
@@ -24,6 +27,10 @@ const title = `${config.groupShortName}·成员信息`;
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f7f9" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f1216" />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
     <title>{title}</title>
   </head>
   <body>
@@ -40,16 +47,23 @@ const title = `${config.groupShortName}·成员信息`;
         <h1>{title}</h1>
         <dl class="stats">
           <div><dt>成员</dt><dd>{config.memberCount.toLocaleString("zh-CN")}</dd></div>
-          <div><dt>今年发过言</dt><dd>{activeCount.toLocaleString("zh-CN")}</dd></div>
+          <div><dt>今年发过言</dt><dd>{spokeCount.toLocaleString("zh-CN")}</dd></div>
+          <div>
+            <dt>活跃成员 <small>≥ {activeThreshold} 条</small></dt>
+            <dd>{activeCount.toLocaleString("zh-CN")}</dd>
+          </div>
           <div><dt>发言总数</dt><dd>{totalMsgs.toLocaleString("zh-CN")}</dd></div>
         </dl>
         <p class="meta">
-          数据截止 <time datetime={config.dataCutoff}>{formatDateTime(config.dataCutoff)}</time>
-          · 采集于 <time datetime={config.collectedAt}>{formatDateTime(config.collectedAt)}</time>
+          <span>数据截止 <time datetime={config.dataCutoff}>{formatDateTime(config.dataCutoff)}</time></span>
+          <span>采集于 <time datetime={config.collectedAt}>{formatDateTime(config.collectedAt)}</time></span>
         </p>
         <details class="rule">
           <summary>统计口径</summary>
           <p>{config.countingRule}</p>
+          <p>
+            “活跃成员”指发言数不低于发过言成员的中位数（本次为 {activeThreshold} 条），卡片上以蓝色发言数标示。
+          </p>
         </details>
       </div>
     </header>
@@ -74,15 +88,28 @@ const title = `${config.groupShortName}·成员信息`;
             <option value="name-asc">名称 A→Z</option>
           </select>
         </label>
-        <label class="toggle">
-          <input id="active-only" type="checkbox" />
-          只看发过言的
+        <label class="sort">
+          <span class="sr-only">范围</span>
+          <select id="scope">
+            <option value="all" selected>全部成员</option>
+            <option value="active">活跃成员（≥ {activeThreshold} 条）</option>
+            <option value="spoke">有发言的</option>
+          </select>
         </label>
         <span id="shown" class="shown" aria-live="polite"></span>
       </form>
 
       <ol id="list" class="grid">
-        {sorted.map((m, i) => <MemberCard member={m} rank={i + 1} showRemark={showRemark} />)}
+        {
+          sorted.map((m, i) => (
+            <MemberCard
+              member={m}
+              rank={i + 1}
+              active={m.msgCount >= activeThreshold}
+              showRemark={showRemark}
+            />
+          ))
+        }
       </ol>
       <p id="empty" class="empty" hidden>没有匹配的成员</p>
     </main>
@@ -94,7 +121,7 @@ const title = `${config.groupShortName}·成员信息`;
           <strong>来源：</strong>数据来自收集者自己设备上的微信聊天记录，只覆盖该设备实际同步到的消息。收集者离线、换机、消息未同步等都会造成缺漏，统计结果<strong>不绝对准确，仅供参考</strong>。
         </li>
         <li>
-          <strong>范围：</strong>{config.year} 年 1 月 1 日起至数据截止时间（见页首）。只列出采集时仍在群内的成员，已退群者的发言不计入；排名按发言条数，同分按内部 id 排序。
+          <strong>范围：</strong>{config.year} 年 1 月 1 日起至数据截止时间（见页首）。只列出采集时仍在群内的成员，已退群者的发言不计入。发过言的成员按条数排名（同分按内部 id），未发言成员不计名次，列于末尾。
         </li>
         <li>
           <strong>展示内容：</strong>头像、群昵称、微信昵称与微信号均为成员在群内对其他成员可见的资料；不包含聊天内容。
@@ -110,7 +137,7 @@ const title = `${config.groupShortName}·成员信息`;
       // 零依赖：所有卡片已在构建期渲染，这里只做过滤与重排
       const q = document.getElementById("q") as HTMLInputElement;
       const sortSel = document.getElementById("sort") as HTMLSelectElement;
-      const activeOnly = document.getElementById("active-only") as HTMLInputElement;
+      const scopeSel = document.getElementById("scope") as HTMLSelectElement;
       const list = document.getElementById("list") as HTMLOListElement;
       const empty = document.getElementById("empty") as HTMLElement;
       const shown = document.getElementById("shown") as HTMLElement;
@@ -118,6 +145,7 @@ const title = `${config.groupShortName}·成员信息`;
       const total = cards.length;
 
       const countOf = (c: HTMLLIElement) => Number(c.dataset.count ?? 0);
+      const isActive = (c: HTMLLIElement) => c.dataset.active === "";
       const rankOf = (c: HTMLLIElement) => Number(c.dataset.rank ?? 0);
       const nameOf = (c: HTMLLIElement) => c.dataset.name ?? "";
       const collator = new Intl.Collator("zh", { numeric: true, sensitivity: "base" });
@@ -128,12 +156,20 @@ const title = `${config.groupShortName}·成员信息`;
         "name-asc": (a, b) => collator.compare(nameOf(a), nameOf(b)),
       };
 
+      // 范围筛选：活跃与否由构建期算好的 data-active 决定，浏览器端不重算中位数
+      const showAll = () => true;
+      const scopes: Record<string, (c: HTMLLIElement) => boolean> = {
+        all: showAll,
+        active: isActive,
+        spoke: (c) => countOf(c) > 0,
+      };
+
       function apply() {
         const needle = q.value.trim().toLowerCase();
-        const onlyActive = activeOnly.checked;
+        const inScope = scopes[scopeSel.value] ?? showAll;
         let visible = 0;
         for (const c of cards) {
-          const hit = (!needle || (c.dataset.search ?? "").includes(needle)) && (!onlyActive || countOf(c) > 0);
+          const hit = (!needle || (c.dataset.search ?? "").includes(needle)) && inScope(c);
           c.hidden = !hit;
           if (hit) visible++;
         }
@@ -149,7 +185,7 @@ const title = `${config.groupShortName}·成员信息`;
         timer = window.setTimeout(apply, 80);
       });
       sortSel.addEventListener("change", apply);
-      activeOnly.addEventListener("change", apply);
+      scopeSel.addEventListener("change", apply);
       apply();
     </script>
   </body>
@@ -196,6 +232,10 @@ const title = `${config.groupShortName}·成员信息`;
     font-size: 0.8rem;
     color: var(--muted);
   }
+  .stats dt small {
+    font-size: 0.75em;
+    opacity: 0.85;
+  }
   .stats dd {
     margin: 0;
     font-size: 1.5rem;
@@ -203,9 +243,15 @@ const title = `${config.groupShortName}·成员信息`;
     font-variant-numeric: tabular-nums;
   }
   .meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0 1rem;
     margin: 1rem 0 0.25rem;
     font-size: 0.85rem;
     color: var(--muted);
+  }
+  .meta span {
+    white-space: nowrap; /* 日期与时间不拆行，窄屏时整项换行 */
   }
   .rule {
     font-size: 0.85rem;
@@ -247,13 +293,6 @@ const title = `${config.groupShortName}·成员信息`;
     outline: 2px solid var(--accent);
     outline-offset: 1px;
   }
-  .toggle {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    font-size: 0.9rem;
-    white-space: nowrap;
-  }
   .shown {
     margin-left: auto;
     font-size: 0.85rem;
@@ -271,6 +310,11 @@ const title = `${config.groupShortName}·成员信息`;
     gap: 0.75rem;
   }
   @media (max-width: 480px) {
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr; /* 四项指标窄屏排 2×2，避免 3+1 的残行 */
+      gap: 1rem 1.5rem;
+    }
     .toolbar {
       gap: 0.5rem;
     }
