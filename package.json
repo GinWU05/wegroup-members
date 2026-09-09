@@ -2,6 +2,7 @@
   "name": "wegroup-members",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "description": "微信群成员信息收集与展示站：Chatlog → members.json → 静态站",
   "type": "module",
   "engines": {
@@ -12,6 +13,7 @@
     "collect": "pnpm run collect:public",
     "collect:public": "node --disable-warning=ExperimentalWarning scripts/collect.ts",
     "collect:private": "node --disable-warning=ExperimentalWarning scripts/collect.ts --private",
+    "mock": "node --disable-warning=ExperimentalWarning scripts/mock-data.ts",
     "web:dev": "astro dev --root web",
     "web:build": "astro build --root web",
     "web:preview": "astro preview --root web",
