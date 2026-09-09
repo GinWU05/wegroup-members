@@ -12,8 +12,16 @@
 [![Cloudflare Pages](https://img.shields.io/badge/Cloudflare-Pages-F38020?logo=cloudflare&logoColor=white)](https://pages.cloudflare.com/)
 [![Client JS](https://img.shields.io/badge/client%20JS-zero%20islands-brightgreen)](#%EF%B8%8F-how-it-works)
 [![Privacy](https://img.shields.io/badge/privacy-by%20default-blueviolet)](#-privacy-design)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](./LICENSE)
 
 English | [简体中文](./README.zh-CN.md)
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/site-dark.webp">
+  <img src="./docs/screenshots/site-light.webp" alt="Member wall rendered with mock data: stats overview, message distribution histogram, and member cards" width="800">
+</picture>
+
+<sub>Screenshot uses randomly generated mock data (<code>pnpm mock</code>) — no real group data is ever committed.</sub>
 
 </div>
 
@@ -81,6 +89,8 @@ pnpm web:build                    # → web/dist/
 pnpm web:preview
 ```
 
+> **No WeChat data handy?** Run `pnpm mock` to generate a fully fictional dataset (names, avatars, counts) and preview the site immediately — that's what the screenshot above uses. Re-run `pnpm collect` to switch back to real data.
+
 ### `group.local.json` fields
 
 See [`group.example.json`](./group.example.json):
@@ -112,6 +122,7 @@ See [`group.example.json`](./group.example.json):
 |---|---|
 | `pnpm collect` | = `collect:public`: collect data + avatars, public mode |
 | `pnpm collect:private` | Full output incl. private fields — local use only |
+| `pnpm mock` | Generate fictional demo data + avatars (for preview/screenshots) |
 | `pnpm web:dev` | Astro dev server |
 | `pnpm web:build` | Static build → `web/dist/` |
 | `pnpm web:preview` | Preview the built site |
@@ -173,3 +184,7 @@ To rotate the password: edit `site-password.local`, re-run the `secret put` comm
 - [sharp](https://sharp.pixelplumbing.com/) — avatar re-encoding
 
 Detailed engineering conventions and decision records live in [`AGENTS.md`](./AGENTS.md) (in Chinese).
+
+## 📄 License
+
+[MIT](./LICENSE)

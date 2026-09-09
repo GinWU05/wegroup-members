@@ -12,8 +12,16 @@
 [![Cloudflare Pages](https://img.shields.io/badge/Cloudflare-Pages-F38020?logo=cloudflare&logoColor=white)](https://pages.cloudflare.com/)
 [![Client JS](https://img.shields.io/badge/%E5%AE%A2%E6%88%B7%E7%AB%AF%20JS-%E9%9B%B6%20island-brightgreen)](#%EF%B8%8F-工作原理)
 [![Privacy](https://img.shields.io/badge/%E9%9A%90%E7%A7%81-%E9%BB%98%E8%AE%A4%E5%AE%89%E5%85%A8-blueviolet)](#-隐私设计)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow)](./LICENSE)
 
 [English](./README.md) | 简体中文
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./docs/screenshots/site-dark.webp">
+  <img src="./docs/screenshots/site-light.webp" alt="用模拟数据渲染的成员墙：概览指标、发言数分布柱状图与成员卡片" width="800">
+</picture>
+
+<sub>截图使用随机生成的模拟数据（<code>pnpm mock</code>）—— 任何真实群数据都不会入库。</sub>
 
 </div>
 
@@ -81,6 +89,8 @@ pnpm web:build                    # → web/dist/
 pnpm web:preview
 ```
 
+> **手头没有微信数据？** 跑 `pnpm mock` 生成一套纯虚构的示例数据（昵称、头像、发言数）立刻预览站点效果 —— 上面的截图就是这么来的。重新跑 `pnpm collect` 即可切回真实数据。
+
 ### `group.local.json` 字段
 
 参见 [`group.example.json`](./group.example.json)：
@@ -112,6 +122,7 @@ pnpm web:preview
 |---|---|
 | `pnpm collect` | = `collect:public`：采集数据 + 头像，public 模式 |
 | `pnpm collect:private` | 全量输出（含隐私字段）—— 仅本机自用 |
+| `pnpm mock` | 生成虚构示例数据 + 头像（预览 / 截图用） |
 | `pnpm web:dev` | Astro 开发服务器 |
 | `pnpm web:build` | 静态构建 → `web/dist/` |
 | `pnpm web:preview` | 预览构建产物 |
@@ -173,3 +184,7 @@ pnpm web:deploy
 - [sharp](https://sharp.pixelplumbing.com/) —— 头像重编码
 
 详细工程约定与决策记录见 [`AGENTS.md`](./AGENTS.md)。
+
+## 📄 许可证
+
+[MIT](./LICENSE)
