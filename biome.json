@@ -6,7 +6,7 @@
     "useIgnoreFile": true
   },
   "files": {
-    "includes": ["**", "!pnpm-lock.yaml", "!web/.astro"]
+    "includes": ["**", "!pnpm-lock.yaml", "!web/.astro", "!web/public"]
   },
   "formatter": {
     "enabled": true,
