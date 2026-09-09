@@ -14,7 +14,7 @@
    - `GET /api/v1/chatroom?keyword=<群名>&format=json` → 群信息 + 成员列表（wxid、群内 displayName）
    - `GET /api/v1/chatlog?talker=<chatroom>&time=<起>~<止>&format=json` → 消息记录（`limit`/`offset` 实测有效；实测单次拉 14 万条也可行，但采集按月分片 + `seq` 去重更稳）
    - `GET /api/v1/contact?keyword=<wxid>&format=json` → **仅** userName/alias/remark/nickName/isFriend，**无头像字段**，且 keyword 为模糊匹配（必须校验返回 `userName === 请求 wxid`）
-   - **头像与完整联系人属性来源：Chatlog 已解密的 SQLite `contact.db`**（路径见 `group.local.json`），只读打开，取 `contact.small_head_url` / `alias` / `nick_name` / `remark`，经 `chatroom_member` 表校验群成员身份。实测目标群 448/448 在 contact 表有记录，446/448 有 `wx.qlogo.cn` 头像；alias 仅 34/448 有值（微信数据本身限制，非好友大多为空）
+   - **头像与完整联系人属性来源：Chatlog 已解密的 SQLite `contact.db`**（路径见 `group.local.json`），只读打开，取 `contact.big_head_url`（原图 `/0`，实测中位 940px；回退 `small_head_url` `/132`）/ `alias` / `nick_name` / `remark`，经 `chatroom_member` 表校验群成员身份。实测目标群 448/448 在 contact 表有记录，446/448 有 `wx.qlogo.cn` 头像；alias 仅 34/448 有值（微信数据本身限制，非好友大多为空）
 2. **Skill: `productivity/chatlog-story-daily`**（位于 `~/.hermes/skills/productivity/chatlog-story-daily/`）
    - 复用其头像解析纪律：按 wxid 解析（绝不按昵称）→ 校验群成员身份 → 仅接受 HTTPS `wx.qlogo.cn` 头像 URL → 限制下载大小 → 本地缓存 → 失败降级为首字母占位
    - 复用其数据新鲜度原则：采集"今年"数据前确认 Chatlog 快照覆盖到最新，报告中注明数据截止时间
@@ -30,7 +30,7 @@ wegroup-members/
 ├── biome.json             # Biome 统一 lint + format
 ├── scripts/               # 数据采集层（本地运行）
 │   ├── collect.ts         # 参数化：--config <群配置> --year <年> --out <路径> [--avatars-dir <路径>] [--no-avatars] [--private]
-│   └── lib/avatars.ts     # M2 头像下载/校验/缓存/清理
+│   └── lib/avatars.ts     # M2 头像下载/校验/缩放/缓存/清理
 ├── web/                   # Web 展示层（静态站，Vite）
 │   ├── src/
 │   └── public/
@@ -51,15 +51,16 @@ wegroup-members/
 ### 采集层（scripts/）
 
 1. 读 `group.local.json` 拿群配置，经 chatroom 接口取当前成员列表（wxid + displayName）
-2. 读 `contact.db`（只读）批量补齐：alias、nickName、remark、`small_head_url`，并经 `chatroom_member` 校验成员身份
+2. 读 `contact.db`（只读）批量补齐：alias、nickName、remark、`big_head_url`（回退 `small_head_url`），并经 `chatroom_member` 校验成员身份
 3. 按月分片拉取今年（当年 1 月 1 日 ~ 采集日）全部群消息，`seq` 去重，按 sender wxid 聚合发言次数
    - **统计口径**：排除系统消息（type=10000）与无 sender / sender=`系统消息` 的记录；其余类型（文本 1、图片 3、视频 43、**表情包 47 算发言**、链接/引用/文件 49 等）全部计为发言。口径写入 `config.countingRule` 并在站点明示
    - **退群成员**：只输出采集时点的当前成员；已退群者的发言不计入榜单（脚本日志打印被排除的人数/条数以便核对）
    - **非法 sender**：Chatlog 对部分引用消息会把消息 XML 塞进 `sender` 字段，用 `^[A-Za-z0-9_\-@.]+$` 校验 wxid 格式，不合法的归入排除（实测约 200 条/年）
-4. 头像下载到本地 `avatars/<wxid>.<ext>`（`scripts/lib/avatars.ts`）：
+4. 头像下载原图并本地缩放为 `avatars/<wxid>.webp`（`scripts/lib/avatars.ts`，sharp）：
    - **准入**：URL 必须 `https://wx.qlogo.cn/`，且 wxid 经 `chatroom_member` 确认为群成员；重定向每一跳重新校验 host，最多 3 跳
-   - **响应校验**：`Content-Type: image/*` → 流式读取上限 512 KB（不信任 Content-Length）→ 魔数必须 JPEG/PNG/GIF/WEBP，扩展名按真实格式落盘（实测约 90% JPEG，`/132` 规格单张 ~3 KB）
-   - **缓存**：`data/avatar-cache.json` 记 wxid → {url, file}，URL 未变且文件在则不重下；全量 445 张首次 ~13 s，命中缓存 ~0 s
+   - **响应校验**：`Content-Type: image/*` → 流式读取上限 1 MB（不信任 Content-Length；原图实测最大 ~160 KB）→ 魔数必须 JPEG/PNG/GIF/WEBP → 才交给 sharp 解码，源图边长 > 4096 拒绝（防解压炸弹）
+   - **缩放**：按 EXIF 方向摆正 → 居中裁方 → 256×256 WebP q82，不保留任何元数据（隐私加分）。实测 445 张共 4.3 MB，中位 7.5 KB；只部署缩放版，原图不落盘
+   - **缓存**：`data/avatar-cache.json` 记 wxid → {url, spec, file}，URL 与规格未变且文件在则不重下；改 `OUTPUT_SIZE`/质量需 bump `SPEC` 让缓存整体失效。全量 445 张首次 ~16 s，命中缓存 ~0 s
    - **清理**：每次采集后删除目录内不属于本次成员的旧头像与残留 `.tmp`，保证磁盘文件 == members.json 引用
    - **降级**：任一步失败 → `avatar: null`，日忘打印原因，展示层首字母占位；`--no-avatars` 可跳过下载只跑统计
 5. 产出统一 schema 的 `members.json`：
@@ -82,7 +83,7 @@ wegroup-members/
       "nickName": "...",      // 微信昵称
       "displayName": "...",   // 群昵称
       "remark": "...",        // 采集者备注；隐私模式下删除
-      "avatar": "...",        // 站点根相对路径 avatars/<wxid>.<jpg|png|gif|webp>，可 null
+      "avatar": "...",        // 站点根相对路径 avatars/<wxid>.webp（256×256），可 null
       "msgCount": 123         // 发言数
     }
   ]
@@ -154,7 +155,7 @@ wegroup-members/
 ## 实现里程碑
 
 - [x] M1 采集脚本：群成员（chatroom API）+ 联系人信息（contact.db 只读）+ 年度发言计数（按月分片）→ `members.json`
-- [x] M2 头像本地化：下载 / 校验 / 缓存 / 清理 / 降级（`scripts/lib/avatars.ts`，实测 445/445）
+- [x] M2 头像本地化：下载原图 / 校验 / 缩放 256 WebP / 缓存 / 清理 / 降级（`scripts/lib/avatars.ts`，实测 445/445）
 - [ ] M3 Web 站点：卡片墙 + 排序 + 搜索
 - [x] M4 隐私模式：`collect:private`，删除字段清单集中在 `PRIVATE_STRIPPED_FIELDS`（默认仍全量）
 - [ ] M5 CF Pages 部署（**必须 CF Access 或口令**）
