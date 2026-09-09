@@ -192,4 +192,4 @@ wegroup-members/
 - [x] M3 Web 站点：Astro 静态卡片墙 + 搜索 / 排序 / 范围筛选 / 活跃标识（`web/`，零 island）
 - [x] M4 输出模式：默认 public（删 `PUBLIC_STRIPPED_FIELDS`），`collect:private` 全量仅本机；站点对 private 产物挂警示
 - [x] M5 CF Pages 部署：项目 `wegroup-members` + 口令门（`functions/_middleware.ts`，Secret `SITE_PASSWORD`）+ 部署脚本（`scripts/deploy.ts`：拒 private / 隐私复核 / 上传），线上验证 401 → 口令 303 → Cookie 200，头像同在门内
-- [ ] M6 自定义域绑定：复用既有域名子域（值不入库）；Pages 侧已挂、待 zone 手动加 CNAME → `wegroup-members.pages.dev`（wrangler OAuth 无 DNS 写权限）
+- [x] M6 自定义域绑定：复用既有域名子域（值不入库），Pages 挂域 + zone 手动加 proxied CNAME → `wegroup-members.pages.dev`（wrangler OAuth 无 DNS 写权限）；线上四连自查在自定义域上复验通过
